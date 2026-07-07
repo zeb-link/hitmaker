@@ -62,6 +62,11 @@ hitmaker run --for 30s --rate 60 --mode vercel https://example.com/a
 hitmaker run --bots ai --bot-ratio 100 https://example.com/a
 hitmaker bots --json
 hitmaker config edit`),
+		// Accept bare targets (URLs / files) on the root command. Without this,
+		// Cobra's default validator treats the first arg as a subcommand and
+		// rejects `hitmaker <url>` with "unknown command". Registered subcommands
+		// (run, tui, ...) still match first and take precedence.
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.Config {
 				return runConfigEditor()
