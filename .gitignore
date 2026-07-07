@@ -21,3 +21,6 @@ coverage.out
 
 # npm wrapper download dir (created at install time)
 npm/vendor/
+
+# Local (uncommitted) agent/dev notes — see AGENTS.md for the committed conventions
+AGENTS.local.md
