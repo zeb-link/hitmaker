@@ -11,6 +11,6 @@ fi
 
 mkdir -p "$install_dir"
 ln -sf "$binary" "$install_dir/hitmaker"
-# `hm` is a short alias for the same binary.
-ln -sf "$binary" "$install_dir/hm"
-printf 'hitmaker installed at %s (alias: hm)\n' "$install_dir/hitmaker"
+# `hit` is a short alias for the same binary.
+ln -sf "$binary" "$install_dir/hit"
+printf 'hitmaker installed at %s (alias: hit)\n' "$install_dir/hitmaker"
