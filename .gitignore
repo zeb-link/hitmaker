@@ -18,3 +18,6 @@ dist/
 *.test
 *.out
 coverage.out
+
+# npm wrapper download dir (created at install time)
+npm/vendor/
