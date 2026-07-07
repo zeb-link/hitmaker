@@ -43,3 +43,11 @@ func subnet(ip string) string {
 	parts := strings.Split(ip, ".")
 	return strings.Join(parts[:3], ".")
 }
+
+func TestEveryLocationCountryHasOctets(t *testing.T) {
+	for _, loc := range Locations {
+		if len(IPFirstOctets[loc.Country]) == 0 {
+			t.Fatalf("location %s/%s has no IP octets — IPs would fall back to US and mismatch the geo", loc.City, loc.Country)
+		}
+	}
+}
