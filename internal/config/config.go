@@ -21,6 +21,7 @@ type Mode string
 
 const (
 	ModeNone   Mode = "none"
+	ModeAuto   Mode = "auto"
 	ModeVercel Mode = "vercel"
 	ModeProxy  Mode = "proxy"
 )
@@ -247,7 +248,7 @@ func (c Config) Validate() error {
 		return errors.New("idle phase minutes are invalid")
 	}
 	switch c.Origin.Mode {
-	case ModeNone, ModeVercel, ModeProxy:
+	case ModeNone, ModeAuto, ModeVercel, ModeProxy:
 	default:
 		return fmt.Errorf("unknown origin mode %q", c.Origin.Mode)
 	}
@@ -716,6 +717,8 @@ func envFloat(key string) (float64, bool, error) {
 
 func legacyMode(value string) Mode {
 	switch strings.ToLower(value) {
+	case "auto":
+		return ModeAuto
 	case "service", "url", "free", "proxy":
 		return ModeProxy
 	case "vercel":

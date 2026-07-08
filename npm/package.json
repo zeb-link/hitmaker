@@ -1,6 +1,6 @@
 {
   "name": "hitmaker",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Synthetic traffic generator for testing analytics, redirect, and click-tracking systems. Ships a prebuilt native binary with a Bubble Tea TUI and a headless CLI.",
   "bin": {
     "hitmaker": "bin/hitmaker.js"

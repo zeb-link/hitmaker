@@ -35,7 +35,7 @@ type Options struct {
 type Runner struct {
 	cfg        config.Config
 	targets    []string
-	transport  *http.Transport
+	transport  proxy.Transport
 	client     *http.Client
 	collector  *Collector
 	idgen      *identity.Generator
@@ -65,7 +65,7 @@ func New(ctx context.Context, opts Options) (*Runner, error) {
 	if maxWorkers <= 0 {
 		maxWorkers = DefaultMaxWorkers
 	}
-	transport, err := proxy.DefaultRegistry().BuildTransport(ctx, opts.Config.Origin)
+	transport, err := proxy.DefaultRegistry().BuildTransportForTargets(ctx, opts.Config.Origin, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (r *Runner) doHit(target string, workerID int, rng *rand.Rand) {
 		req.ContentLength = 0
 	}
 	identity.ApplyBrowserHeaders(req.Header, ident)
-	if r.cfg.Origin.Mode == config.ModeVercel {
+	if r.usesVercelGeoHeaders(req.URL) {
 		identity.ApplyVercelGeoHeaders(req.Header, ident)
 	}
 
@@ -323,6 +323,17 @@ func (r *Runner) doHit(target string, workerID int, rng *rand.Rand) {
 		result.Err = res.Status
 	}
 	r.collector.Add(result)
+}
+
+func (r *Runner) usesVercelGeoHeaders(u *url.URL) bool {
+	switch r.cfg.Origin.Mode {
+	case config.ModeVercel:
+		return true
+	case config.ModeAuto:
+		return !proxy.UsesPaidProxy(u)
+	default:
+		return false
+	}
 }
 
 // humanCity decodes the URL-escaped city stored for geo headers (e.g.

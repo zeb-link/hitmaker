@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,42 @@ func TestSeedReproducibleIdentity(t *testing.T) {
 	b := r2.Probe(srv.URL)
 	if a.UserAgent != b.UserAgent || a.IP != b.IP {
 		t.Fatalf("seed not reproducible: %q/%q vs %q/%q", a.UserAgent, a.IP, b.UserAgent, b.IP)
+	}
+}
+
+func TestAutoModeUsesVercelHeadersForLocalTargets(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig()
+	cfg.Origin.Mode = config.ModeAuto
+	r, err := New(context.Background(), Options{Config: cfg, Targets: []string{srv.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Probe(srv.URL)
+	if got.Err != "" || got.Status != 200 {
+		t.Fatalf("probe status=%d err=%q", got.Status, got.Err)
+	}
+	headers := <-seen
+	if headers.Get("x-vercel-ip-country") == "" || headers.Get("x-forwarded-for") == "" {
+		t.Fatalf("auto local target did not receive Vercel geo headers: %#v", headers)
+	}
+}
+
+func TestAutoModeRequiresProxyProviderForPublicTargets(t *testing.T) {
+	cfg := testConfig()
+	cfg.Origin.Mode = config.ModeAuto
+	_, err := New(context.Background(), Options{Config: cfg, Targets: []string{"https://example.com/a"}})
+	if err == nil {
+		t.Fatal("expected missing proxy provider error")
+	}
+	if !strings.Contains(err.Error(), "iproyal provider requires") {
+		t.Fatalf("error = %q, want missing iproyal provider", err)
 	}
 }
 

@@ -49,7 +49,7 @@ func TestConfigEditorUppercaseNestedParamKeys(t *testing.T) {
 
 func TestConfigEditorViewShowsCommandBarAndSections(t *testing.T) {
 	editor := newConfigEditor(config.Default())
-	view := editor.View(120, 36, nil)
+	view := editor.View(120, 42, nil)
 	for _, want := range []string{"TRAFFIC", "IDENTITY", "ORIGIN", "SHORTCUTS", "URL PARAMS", "Type numbers"} {
 		if !contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
@@ -72,6 +72,73 @@ func TestConfigEditorDirectNumberTyping(t *testing.T) {
 	editor, _, _ = editor.Update(keyMsg("2"))
 	if editor.cfg.Traffic.MinPerMin != 42 {
 		t.Fatalf("min rate = %d, want 42", editor.cfg.Traffic.MinPerMin)
+	}
+}
+
+func TestConfigEditorSelectChangesInlineAndEnterAdvances(t *testing.T) {
+	editor := newConfigEditor(config.Default())
+	methodFocus := 0
+	for i, field := range editor.fields {
+		if field.key == "method" {
+			methodFocus = i
+			editor.focus = i
+			break
+		}
+	}
+
+	editor, action, _ := editor.Update(keyMsg("n"))
+	if action != configActionNone {
+		t.Fatalf("action = %v, want none", action)
+	}
+	if editor.cfg.Requests.Method != "HEAD" {
+		t.Fatalf("method = %s, want HEAD", editor.cfg.Requests.Method)
+	}
+	if editor.focus != methodFocus {
+		t.Fatalf("focus = %d, want method row %d", editor.focus, methodFocus)
+	}
+
+	editor, _, _ = editor.Update(keyMsg("j"))
+	if editor.focus != methodFocus+1 {
+		t.Fatalf("down focus = %d, want next row %d", editor.focus, methodFocus+1)
+	}
+	editor.focus = methodFocus
+
+	editor, _, _ = editor.Update(keyMsg("enter"))
+	if editor.focus != methodFocus+1 {
+		t.Fatalf("enter focus = %d, want next row %d", editor.focus, methodFocus+1)
+	}
+}
+
+func TestConfigEditorFocusedSelectKeepsRadioRendering(t *testing.T) {
+	editor := newConfigEditor(config.Default())
+	for i, field := range editor.fields {
+		if field.key == "method" {
+			editor.focus = i
+			break
+		}
+	}
+	view := editor.View(120, 36, nil)
+	if contains(view, "[GET]") {
+		t.Fatalf("focused select should not use bracket fallback:\n%s", view)
+	}
+	if !contains(view, "● GET") || !contains(view, "○ HEAD") {
+		t.Fatalf("focused select missing radio options:\n%s", view)
+	}
+}
+
+func TestConfigEditorWideViewShowsFieldGuide(t *testing.T) {
+	editor := newConfigEditor(config.Default())
+	for i, field := range editor.fields {
+		if field.key == "mode" {
+			editor.focus = i
+			break
+		}
+	}
+	view := editor.View(160, 36, nil)
+	for _, want := range []string{"FIELD GUIDE", "ORIGIN / Origin mode", "Auto:", "public domains", "localhost"} {
+		if !contains(view, want) {
+			t.Fatalf("wide view missing %q:\n%s", want, view)
+		}
 	}
 }
 
@@ -104,7 +171,7 @@ func TestConfigEditorDimsProxyFieldsWhenNotProxyMode(t *testing.T) {
 		}
 	}
 	view := editor.View(120, 36, nil)
-	if !contains(view, "Disabled until Origin mode is Proxy service.") {
+	if !contains(view, "Disabled until Origin mode is Auto or Proxy service.") {
 		t.Fatalf("proxy disabled help missing:\n%s", view)
 	}
 }

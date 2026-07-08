@@ -25,6 +25,8 @@ func SampleDashboard(width, height int) string {
 func SampleConfig(width, height int) string {
 	e := newConfigEditor(config.Default())
 	e.focus = 5 // Bot pool
+	_, rightWidth := dashboardPaneWidths(width)
+	e = e.WithHelpWidth(rightWidth)
 	return e.View(width, height, nil)
 }
 

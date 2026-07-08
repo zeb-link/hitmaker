@@ -64,7 +64,7 @@ func newProbeCommand(root *rootOptions) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: none, vercel, proxy")
+	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: none, auto, vercel, proxy")
 	cmd.Flags().BoolVar(&opts.Factory, "factory", false, "ignore saved config and use built-in defaults")
 	cmd.Flags().DurationVar(&opts.Timeout, "timeout", 10*time.Second, "request timeout")
 	cmd.Flags().StringVar(&opts.Bots, "bots", "", "send a bot identity: category/name, e.g. GPTBot or ai (see `hitmaker bots`)")

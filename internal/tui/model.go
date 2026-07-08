@@ -30,6 +30,11 @@ const (
 
 type tickMsg time.Time
 
+const (
+	bodyInsetX = 2
+	bodyInsetY = 1
+)
+
 type Model struct {
 	cfg     config.Config
 	targets []string
@@ -43,6 +48,7 @@ type Model struct {
 	snapshot   simulator.Snapshot
 	spinner    spinner.Model
 	configEdit configEditor
+	introStart time.Time
 	introUntil time.Time
 	err        error
 }
@@ -62,7 +68,8 @@ func New(opts Options) (Model, error) {
 		configEdit: newConfigEditor(opts.Config),
 	}
 	if !opts.NoIntro {
-		m.introUntil = time.Now().Add(900 * time.Millisecond)
+		m.introStart = time.Now()
+		m.introUntil = m.introStart.Add(900 * time.Millisecond)
 	}
 	return m, nil
 }
@@ -146,7 +153,9 @@ func (m Model) View() string {
 		return ""
 	}
 	if m.mode == modeConfig {
-		return m.configEdit.View(m.width, m.height, m.err)
+		contentWidth := max(1, m.width-bodyInsetX*2)
+		_, rightWidth := dashboardPaneWidths(contentWidth)
+		return m.configEdit.WithHelpWidth(rightWidth).View(m.width, m.height, m.err)
 	}
 	if time.Now().Before(m.introUntil) {
 		return m.introView()
@@ -185,9 +194,9 @@ var hitmakerBanner = buildBanner("HITMAKER")
 func (m Model) introView() string {
 	var head string
 	if m.width >= 50 {
-		head = theme.Logo.Render(strings.Join(hitmakerBanner, "\n"))
+		head = m.animatedBanner()
 	} else {
-		head = theme.Logo.Render("H I T M A K E R")
+		head = m.animatedIntroText("H I T M A K E R")
 	}
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		head,
@@ -197,6 +206,56 @@ func (m Model) introView() string {
 		theme.Focus.Render(m.spinner.View()+" warming up"),
 	)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
+}
+
+func (m Model) animatedBanner() string {
+	elapsed := time.Since(m.introStart)
+	if m.introStart.IsZero() {
+		elapsed = 0
+	}
+	phase := int(elapsed / (90 * time.Millisecond))
+	styles := []lipgloss.Style{
+		lipgloss.NewStyle().Foreground(theme.HotPink).Bold(true),
+		lipgloss.NewStyle().Foreground(theme.Cyan).Bold(true),
+		lipgloss.NewStyle().Foreground(theme.Mint).Bold(true),
+		lipgloss.NewStyle().Foreground(theme.Amber).Bold(true),
+	}
+	rows := make([]string, len(hitmakerBanner))
+	for row, line := range hitmakerBanner {
+		parts := make([]string, 0, len(line))
+		for col, r := range line {
+			if r == ' ' {
+				parts = append(parts, " ")
+				continue
+			}
+			style := styles[(phase+col+row)%len(styles)]
+			parts = append(parts, style.Render(string(r)))
+		}
+		rows[row] = strings.Join(parts, "")
+	}
+	return strings.Join(rows, "\n")
+}
+
+func (m Model) animatedIntroText(text string) string {
+	elapsed := time.Since(m.introStart)
+	if m.introStart.IsZero() {
+		elapsed = 0
+	}
+	phase := int(elapsed / (90 * time.Millisecond))
+	styles := []lipgloss.Style{
+		lipgloss.NewStyle().Foreground(theme.HotPink).Bold(true),
+		lipgloss.NewStyle().Foreground(theme.Cyan).Bold(true),
+		lipgloss.NewStyle().Foreground(theme.Mint).Bold(true),
+	}
+	parts := make([]string, 0, len(text))
+	for i, r := range text {
+		if r == ' ' {
+			parts = append(parts, " ")
+			continue
+		}
+		parts = append(parts, styles[(phase+i)%len(styles)].Render(string(r)))
+	}
+	return strings.Join(parts, "")
 }
 
 func (m Model) dashboardView() string {
@@ -212,19 +271,14 @@ func (m Model) dashboardView() string {
 		bodyHeight = 3
 	}
 
-	leftWidth := m.width
-	rightWidth := 0
-	if m.width >= 92 {
-		// Cap the recent pane so it stays a companion column instead of eating
-		// half of an ultrawide terminal; the table takes the rest.
-		rightWidth = clampInt(int(float64(m.width)*0.40), 34, 60)
-		leftWidth = m.width - rightWidth - 1
-	}
+	contentWidth := max(1, m.width-bodyInsetX*2)
+	contentHeight := max(1, bodyHeight-bodyInsetY)
+	leftWidth, rightWidth := dashboardPaneWidths(contentWidth)
 
-	table := m.tableView(snap, leftWidth, bodyHeight)
+	table := m.tableView(snap, leftWidth, contentHeight)
 	var main string
 	if rightWidth >= 34 {
-		recent := m.recentView(snap, rightWidth, bodyHeight)
+		recent := m.recentView(snap, rightWidth, contentHeight)
 		main = lipgloss.JoinHorizontal(lipgloss.Top,
 			lipgloss.NewStyle().Width(leftWidth).Render(table),
 			" ",
@@ -233,8 +287,20 @@ func (m Model) dashboardView() string {
 	} else {
 		main = table
 	}
+	main = insetBlock(main, bodyInsetX, bodyInsetY)
 	main = lipgloss.NewStyle().Width(m.width).Height(bodyHeight).MaxHeight(bodyHeight).Render(main)
 	return lipgloss.JoinVertical(lipgloss.Left, header, main, footer)
+}
+
+func dashboardPaneWidths(width int) (int, int) {
+	if width < 92 {
+		return width, 0
+	}
+	// Cap the recent pane so it stays a companion column instead of eating half
+	// of an ultrawide terminal; the main table/config deck takes the rest.
+	rightWidth := clampInt(int(float64(width)*0.40), 34, 60)
+	leftWidth := width - rightWidth - 1
+	return leftWidth, rightWidth
 }
 
 func (m Model) headerView(snap simulator.Snapshot) string {
@@ -369,6 +435,22 @@ func padLines(lines []string, n int) string {
 	}
 	for len(lines) < n {
 		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func insetBlock(block string, left, top int) string {
+	lines := strings.Split(block, "\n")
+	prefix := strings.Repeat(" ", max(0, left))
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = prefix + line
+		} else if left > 0 {
+			lines[i] = prefix
+		}
+	}
+	if top > 0 {
+		lines = append(make([]string, top), lines...)
 	}
 	return strings.Join(lines, "\n")
 }

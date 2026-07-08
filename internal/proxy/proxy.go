@@ -8,10 +8,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/kerns/hitmaker/internal/config"
+	"golang.org/x/net/publicsuffix"
 )
 
 type ProviderConfig map[string]string
@@ -24,6 +26,11 @@ type Provider interface {
 
 type Registry struct {
 	providers map[string]Provider
+}
+
+type Transport interface {
+	http.RoundTripper
+	CloseIdleConnections()
 }
 
 func DefaultRegistry() Registry {
@@ -41,10 +48,31 @@ func (r Registry) Provider(name string) (Provider, bool) {
 	return provider, ok
 }
 
-func (r Registry) BuildTransport(ctx context.Context, origin config.OriginConfig) (*http.Transport, error) {
-	if origin.Mode != config.ModeProxy {
+func (r Registry) BuildTransport(ctx context.Context, origin config.OriginConfig) (Transport, error) {
+	return r.BuildTransportForTargets(ctx, origin, nil)
+}
+
+func (r Registry) BuildTransportForTargets(ctx context.Context, origin config.OriginConfig, targets []string) (Transport, error) {
+	if origin.Mode != config.ModeProxy && origin.Mode != config.ModeAuto {
 		return BaseTransport(), nil
 	}
+	if origin.Mode == config.ModeAuto && !targetsNeedProxy(targets) {
+		return BaseTransport(), nil
+	}
+	proxyTransport, err := r.buildProxyTransport(ctx, origin)
+	if err != nil {
+		return nil, err
+	}
+	if origin.Mode == config.ModeAuto {
+		return &autoTransport{
+			direct: BaseTransport(),
+			proxy:  proxyTransport,
+		}, nil
+	}
+	return proxyTransport, nil
+}
+
+func (r Registry) buildProxyTransport(ctx context.Context, origin config.OriginConfig) (*http.Transport, error) {
 	providerName := origin.Provider
 	if providerName == "" {
 		providerName = "iproyal"
@@ -58,6 +86,85 @@ func (r Registry) BuildTransport(ctx context.Context, origin config.OriginConfig
 		return nil, err
 	}
 	return provider.Transport(ctx, cfg)
+}
+
+func targetsNeedProxy(targets []string) bool {
+	for _, target := range targets {
+		parsed, err := url.Parse(target)
+		if err == nil && UsesPaidProxy(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+type autoTransport struct {
+	direct *http.Transport
+	proxy  *http.Transport
+}
+
+func (t *autoTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if UsesPaidProxy(req.URL) {
+		return t.proxy.RoundTrip(req)
+	}
+	return t.direct.RoundTrip(req)
+}
+
+func (t *autoTransport) CloseIdleConnections() {
+	t.direct.CloseIdleConnections()
+	t.proxy.CloseIdleConnections()
+}
+
+// UsesPaidProxy reports whether auto mode should route the URL through the
+// paid proxy provider. Public, registrable domain names use the proxy; local,
+// private, IP-literal, and reserved/internal names stay direct.
+func UsesPaidProxy(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	return IsPublicDomainHost(u.Hostname())
+}
+
+func IsPublicDomainHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if host == "" || isInternalHost(host) {
+		return false
+	}
+	if net.ParseIP(host) != nil {
+		return false
+	}
+	if !strings.Contains(host, ".") {
+		return false
+	}
+	if _, err := publicsuffix.EffectiveTLDPlusOne(host); err != nil {
+		return false
+	}
+	lastLabel := host[strings.LastIndex(host, ".")+1:]
+	_, icann := publicsuffix.PublicSuffix(lastLabel)
+	return icann
+}
+
+func isInternalHost(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	internalSuffixes := []string{
+		".local",
+		".internal",
+		".intranet",
+		".lan",
+		".home",
+		".home.arpa",
+		".test",
+		".invalid",
+		".example",
+	}
+	for _, suffix := range internalSuffixes {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func BaseTransport() *http.Transport {

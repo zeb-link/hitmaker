@@ -95,6 +95,14 @@ func TestValidateAcceptsKnownBotSpec(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsAutoMode(t *testing.T) {
+	cfg := Default()
+	cfg.Origin.Mode = ModeAuto
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestBotsMergePreservesList(t *testing.T) {
 	cfg := Default()
 	bots := []string{"crawler"}

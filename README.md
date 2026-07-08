@@ -43,9 +43,9 @@ adds a stack of new capabilities:
   thing under test) and doesn't hammer real destination sites. `--follow` opts in.
 
 **Origin modes**
-- `none` / `vercel` geo-header spoofing / `proxy` via a **pluggable paid-provider
-  adapter** system (IPRoyal first; credentials never logged). The old
-  free-proxy-list feature was dropped.
+- `none` / `auto` / `vercel` geo-header spoofing / `proxy` via a **pluggable
+  paid-provider adapter** system (IPRoyal first; credentials never logged). The
+  old free-proxy-list feature was dropped.
 
 **Agent- & script-friendly output (new)**
 - `--json` streams **NDJSON** (one compact snapshot per line).
@@ -113,7 +113,7 @@ status instead. `probe` prints the status of the hop it stops on.
 | `--for 10m` | Run for a duration, then exit. Omit to run until Ctrl-C. |
 | `--rate N` / `--rate MIN-MAX` | Hits per minute **per worker** (equals per-target at the default 1 worker). |
 | `--concurrent N` | Workers per target. |
-| `--mode none\|vercel\|proxy` | Origin mode (see below). |
+| `--mode none\|auto\|vercel\|proxy` | Origin mode (see below). |
 | `--bot-ratio 0-100` | Percent of traffic that is bots. **Same knob** as config `unknownRatio`. |
 | `--bots <spec>` | Which bots (see [Bots & AI crawlers](#bots--ai-crawlers)). |
 | `--device-ratio 0-100` | Of the human hits, percent desktop vs mobile. |
@@ -145,6 +145,7 @@ language, and method still rotate in every mode.
 | Mode | Behavior |
 | --- | --- |
 | `none` | Direct requests, no geo/IP spoofing headers. |
+| `auto` | Public domains with valid TLDs route through the configured paid proxy provider; localhost, `.local`, IP literals, and internal/reserved names stay direct with Vercel geo headers. |
 | `vercel` | Direct requests plus `x-forwarded-for`, `x-real-ip`, and `x-vercel-ip-*` headers. |
 | `proxy` | Routes through a paid proxy provider; geo spoofing headers are disabled. |
 
@@ -152,6 +153,7 @@ The first proxy adapter is `iproyal`:
 
 ```bash
 IPROYAL_URL='http://user:pass@geo.iproyal.com:12321' hitmaker run --mode proxy https://example.com
+IPROYAL_URL='http://user:pass@geo.iproyal.com:12321' hitmaker run --mode auto https://example.com http://localhost:3000
 ```
 
 Proxy credentials are never printed by `config print`.
@@ -361,6 +363,8 @@ make test           # go test ./...
 make fmt            # go fmt ./...
 make vet            # go vet ./...
 make install-local  # symlink bin/hitmaker into ~/.local/bin
+make release-check  # test, build release assets, dry-run npm package
 ```
 
-See `AGENTS.md` for the source-of-truth conventions for working in this repo.
+See `RELEASE.md` for the GitHub-release + npm publish checklist. See
+`AGENTS.md` for the source-of-truth conventions for working in this repo.
