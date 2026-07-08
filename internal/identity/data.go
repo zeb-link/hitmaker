@@ -33,10 +33,10 @@ var Referers = []string{
 	"https://youtube.com/",
 	"https://discord.com/",
 	"https://slack.com/",
-	"https://whatsapp.com/",
+	"https://web.whatsapp.com/",
 	"https://tiktok.com/",
 	"https://pinterest.com/",
-	"https://telegram.org/",
+	"https://web.telegram.org/",
 	"https://weibo.com/",
 }
 
