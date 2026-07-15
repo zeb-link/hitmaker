@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kerns/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/internal/config"
 )
 
 func TestApplyProbabilityAndFragmentCacheBust(t *testing.T) {

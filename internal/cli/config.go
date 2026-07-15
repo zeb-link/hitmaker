@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kerns/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/internal/config"
 )
 
 func newConfigCommand(root *rootOptions) *cobra.Command {

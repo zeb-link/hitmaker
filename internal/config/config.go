@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kerns/hitmaker/internal/identity"
+	"github.com/zeb-link/hitmaker/internal/identity"
 )
 
 const (

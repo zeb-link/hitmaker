@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/kerns/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/internal/config"
 )
 
 func TestApplyBotFlagsImpliesFullBotTraffic(t *testing.T) {

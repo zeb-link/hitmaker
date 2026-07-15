@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"net/url"
 
-	"github.com/kerns/hitmaker/internal/config"
-	"github.com/kerns/hitmaker/internal/identity"
+	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/internal/identity"
 )
 
 type Applied struct {

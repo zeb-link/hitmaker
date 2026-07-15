@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kerns/hitmaker/internal/tui"
+	"github.com/zeb-link/hitmaker/internal/tui"
 )
 
 // newFrameCommand prints a single rendered TUI frame from fixture data and

@@ -1,4 +1,4 @@
-module github.com/kerns/hitmaker
+module github.com/zeb-link/hitmaker
 
 go 1.25
 

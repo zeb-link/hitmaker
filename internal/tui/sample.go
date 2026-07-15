@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 
-	"github.com/kerns/hitmaker/internal/config"
-	"github.com/kerns/hitmaker/internal/simulator"
+	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/internal/simulator"
 )
 
 // SampleDashboard renders one dashboard frame from representative fixture data,
