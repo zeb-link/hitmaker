@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.3 - 2026-07-15
+
+### Security
+
+- Built against Go 1.25.12, clearing **10 reachable standard-library
+  vulnerabilities** in `crypto/tls`, `crypto/x509`, `net/http`, `net/url`, and
+  `net/textproto` that affected every earlier binary. `go.mod` previously
+  requested `go 1.25`, and releases build against whatever that resolves to.
+  Also updates `golang.org/x/net` to v0.57.0 (GO-2026-4918).
+  `govulncheck ./...` now reports no vulnerabilities.
+
+### Added
+
+- `govulncheck` runs in CI on every push and PR, plus weekly on a schedule —
+  a CVE can appear with no code change on our side.
+- Dependabot opens weekly PRs for Go modules and GitHub Actions.
+
 ## 2.1.2 - 2026-07-15
 
 ### Fixed

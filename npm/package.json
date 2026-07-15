@@ -1,6 +1,6 @@
 {
   "name": "hitmaker",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Synthetic traffic generator for testing analytics, redirect, and click-tracking systems. Ships a prebuilt native binary with a Bubble Tea TUI and a headless CLI.",
   "bin": {
     "hitmaker": "bin/hitmaker.js"
@@ -35,11 +35,11 @@
     "node": ">=16"
   },
   "optionalDependencies": {
-    "@zeb-link/hitmaker-darwin-arm64": "2.1.2",
-    "@zeb-link/hitmaker-darwin-x64": "2.1.2",
-    "@zeb-link/hitmaker-linux-arm64": "2.1.2",
-    "@zeb-link/hitmaker-linux-x64": "2.1.2",
-    "@zeb-link/hitmaker-win32-arm64": "2.1.2",
-    "@zeb-link/hitmaker-win32-x64": "2.1.2"
+    "@zeb-link/hitmaker-darwin-arm64": "2.1.3",
+    "@zeb-link/hitmaker-darwin-x64": "2.1.3",
+    "@zeb-link/hitmaker-linux-arm64": "2.1.3",
+    "@zeb-link/hitmaker-linux-x64": "2.1.3",
+    "@zeb-link/hitmaker-win32-arm64": "2.1.3",
+    "@zeb-link/hitmaker-win32-x64": "2.1.3"
   }
 }
