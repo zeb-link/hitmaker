@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
 
 func TestConfigEditorAdvertisedUppercaseShortcuts(t *testing.T) {

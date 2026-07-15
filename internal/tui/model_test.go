@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
 
 func TestDashboardPaneWidthsMatchesConfigHelpWidth(t *testing.T) {

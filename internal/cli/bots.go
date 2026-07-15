@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/zeb-link/hitmaker/internal/identity"
-	"github.com/zeb-link/hitmaker/internal/ui/theme"
+	"github.com/zeb-link/hitmaker/v2/internal/identity"
+	"github.com/zeb-link/hitmaker/v2/internal/ui/theme"
 )
 
 // botCatalogEntry is the machine-readable shape emitted by `bots --json`.

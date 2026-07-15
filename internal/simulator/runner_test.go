@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
 
 func testConfig() config.Config {

@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
 
 // Guards the reported "settings won't stick": A then Enter in the standalone

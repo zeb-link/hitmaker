@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zeb-link/hitmaker/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
 	"golang.org/x/net/publicsuffix"
 )
 

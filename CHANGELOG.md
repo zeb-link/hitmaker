@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.2 - 2026-07-15
+
+### Fixed
+
+- `go install` now installs an actual release. The module path lacked the `/v2`
+  suffix that Go requires once a project tags `v2.x`, so `@v2.1.1` failed
+  outright and `@latest` silently ignored every release tag and installed an
+  arbitrary commit instead. The module is now
+  `github.com/zeb-link/hitmaker/v2` — install with:
+
+  ```bash
+  go install github.com/zeb-link/hitmaker/v2/cmd/hitmaker@latest
+  ```
+
+  npm users are unaffected; the Go module path is invisible to them.
+
 ## 2.1.1 - 2026-07-15
 
 First release published from CI. Carries a provenance attestation.

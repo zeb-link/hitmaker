@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/zeb-link/hitmaker/internal/config"
-	"github.com/zeb-link/hitmaker/internal/identity"
-	"github.com/zeb-link/hitmaker/internal/simulator"
-	"github.com/zeb-link/hitmaker/internal/ui/theme"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/identity"
+	"github.com/zeb-link/hitmaker/v2/internal/simulator"
+	"github.com/zeb-link/hitmaker/v2/internal/ui/theme"
 )
 
 type runOptions struct {

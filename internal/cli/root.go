@@ -13,9 +13,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"github.com/zeb-link/hitmaker/internal/config"
-	"github.com/zeb-link/hitmaker/internal/simulator"
-	"github.com/zeb-link/hitmaker/internal/tui"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/simulator"
+	"github.com/zeb-link/hitmaker/v2/internal/tui"
 )
 
 type rootOptions struct {

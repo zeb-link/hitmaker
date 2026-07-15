@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zeb-link/hitmaker/internal/config"
-	"github.com/zeb-link/hitmaker/internal/identity"
-	"github.com/zeb-link/hitmaker/internal/proxy"
-	"github.com/zeb-link/hitmaker/internal/urlparams"
+	"github.com/zeb-link/hitmaker/v2/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/identity"
+	"github.com/zeb-link/hitmaker/v2/internal/proxy"
+	"github.com/zeb-link/hitmaker/v2/internal/urlparams"
 )
 
 const DefaultMaxWorkers = 128

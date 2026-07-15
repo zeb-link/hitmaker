@@ -1,4 +1,4 @@
-module github.com/zeb-link/hitmaker
+module github.com/zeb-link/hitmaker/v2
 
 go 1.25
 

@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/zeb-link/hitmaker/internal/cli"
+	"github.com/zeb-link/hitmaker/v2/internal/cli"
 )
 
 // devVersion is what a build reports when it has no better answer.

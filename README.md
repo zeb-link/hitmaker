@@ -28,8 +28,10 @@ is no install script, so it works under `--ignore-scripts`.
 If you have Go 1.25 and would rather not go through npm:
 
 ```bash
-go install github.com/zeb-link/hitmaker/cmd/hitmaker@latest
+go install github.com/zeb-link/hitmaker/v2/cmd/hitmaker@latest
 ```
+
+The `/v2` is required — Go encodes the major version in the module path.
 
 To build from a clone:
 
