@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.1 - 2026-07-15
+
+First release published from CI. Carries a provenance attestation.
+
+### Fixed
+
+- The publish script no longer aborts in CI. Trusted publishing authenticates
+  via OIDC at publish time, so there is no logged-in npm user and the script's
+  `npm whoami` guard treated that as a failure.
+
 ## 2.1.0 - 2026-07-15
 
 ### Changed
