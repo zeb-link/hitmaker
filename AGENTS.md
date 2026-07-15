@@ -1,15 +1,22 @@
 # AGENTS.md
 
-This directory is the Go rewrite of Hitmaker, a standalone synthetic-traffic
-generator. It is not coupled to any product API. Do not add auth, product clients,
-or workspace-specific behavior; targets are opaque URLs.
+Hitmaker is a standalone synthetic-traffic generator. It is not coupled to any
+product API. Do not add auth, product clients, or workspace-specific behavior;
+targets are opaque URLs. (It exists to exercise the analytics pipeline behind
+Zebra — but that's provenance, not a dependency. Keep it standalone.)
 
 ## Stack
 
-- Go 1.25
+- Go — the version is set by the `go` directive in `go.mod`; see Maintenance
 - Cobra for commands
 - Bubble Tea, Bubbles, and Lip Gloss for the TUI
 - Stdlib `net/http` and `encoding/json`
+
+Module path is **`github.com/zeb-link/hitmaker/v2`**. ⚠️ The `/v2` is required
+while the tags are `v2.x` — Go encodes the major version in the module path.
+Without it, `go install …@v2.x` errors and `@latest` *silently* installs an
+untagged commit. A v3 means renaming the module to `/v3` and every internal
+import with it.
 
 Use `pnpm` nowhere in this project. This is a standalone Go module.
 
