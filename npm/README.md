@@ -3,6 +3,10 @@
 Synthetic traffic for testing analytics, redirect services, and click-tracking
 systems — a standalone Go tool with a Bubble Tea terminal UI and a headless CLI.
 
+We built it to exercise the analytics pipeline behind
+[Zebra](https://zeblink.io), the short link operating system, and kept it
+standalone so it works against anything that answers HTTP.
+
 This package ships a **prebuilt native binary** (Go) for your platform. Node is
 used to install it, not to run it. The binary lives in a per-platform package
 that npm resolves automatically; the Go source is not included.
