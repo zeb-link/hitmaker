@@ -1,8 +1,24 @@
 # Changelog
 
-## 2.1.0 - 2026-07-08
+## 2.1.0 - 2026-07-15
+
+### Changed
+
+- **Distribution**: the native binary now ships inside the npm package instead
+  of being downloaded from a GitHub release during `postinstall`. `npm i -g
+  hitmaker` is unchanged, but installs no longer run a script, no longer depend
+  on GitHub being reachable, and now work under `--ignore-scripts`. The binary
+  is covered by the lockfile's integrity hash; the old downloader verified
+  nothing. Platform binaries live in `@zeb-link/hitmaker-<platform>-<arch>`
+  packages, and npm installs only the one matching the host.
 
 ### Added
+
+- Releases publish automatically from GitHub Actions on a `v*` tag, using npm
+  trusted publishing (OIDC). Published packages carry provenance attestations.
+- CI runs gofmt, vet, tests, and a release-build dry run on every push and PR.
+
+### Added (from the earlier 2.1.0 work)
 
 - Added `auto` origin mode. Public domains with valid TLDs route through the configured paid proxy provider; localhost, `.local`, IP literals, and internal/reserved names stay direct with Vercel geo headers.
 - Added public-suffix based domain classification for auto proxy routing.

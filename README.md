@@ -1,72 +1,38 @@
-# Hitmaker Redux
+# Hitmaker
 
 Synthetic traffic for testing analytics, redirect services, and click-tracking
 systems. Hitmaker sends realistic-looking HTTP requests to plain target URLs,
 with rotating browser identity, referers, language, geo headers, and human-like
 active/idle scheduling.
 
-It is a standalone tool. Targets are opaque `http` or `https` URLs — no product
-API, no auth, no coupling to anything.
+It is a standalone tool written in Go. Targets are opaque `http` or `https`
+URLs — no product API, no auth, no coupling to anything.
 
 ![Hitmaker live dashboard](docs/dashboard.png)
-
-**Redux** is a from-scratch rewrite in Go (Charm/Bubble Tea TUI stack) that
-replaces the original Node.js implementation. If you're looking for the old
-version, it lives in this repo's git history prior to the Redux migration.
-
-## What's new in Redux
-
-The rewrite is not just a port — it fixes the old architecture's real defects and
-adds a stack of new capabilities:
-
-**Engine & correctness**
-- **Goroutine workers** replace the fork-a-Node-process-per-URL model; one
-  process, a shared keep-alive `http.Transport`, bounded worker cap.
-- **Structured stats bus** — the TUI and headless output read a real snapshot
-  struct instead of scraping the human-readable log (the old load-bearing smell).
-- **Bounded, guaranteed shutdown** — `run` exits promptly when `--for` elapses or
-  on Ctrl-C, even if a proxied connection is slow to close. No more lingering.
-- **Presence-aware config merge** — a configured `0` (rate, ratio, odds) is
-  honored instead of being silently replaced by a default.
-- **Bounded returning-visitor memory** — the `/24`-subnet reuse set is an LRU
-  ring, not an unbounded map.
-
-**Bots & AI traffic (new)**
-- A catalog of **78 bot / AI-crawler identities** you can impersonate, each sent
-  as that agent's real, publicly documented User-Agent string.
-- `hitmaker bots` (+ `--json`) to discover the whole catalog.
-- Two clean knobs: **`--bot-ratio`** (how much traffic is bots) and **`--bots`**
-  (which bots — `ai`, `crawler`, exact names, …).
-
-**Redirect-aware (new)**
-- **Does not follow 3xx by default** — reports the redirect's own status (the
-  thing under test) and doesn't hammer real destination sites. `--follow` opts in.
-
-**Origin modes**
-- `none` / `auto` / `vercel` geo-header spoofing / `proxy` via a **pluggable
-  paid-provider adapter** system (IPRoyal first; credentials never logged). The
-  old free-proxy-list feature was dropped.
-
-**Agent- & script-friendly output (new)**
-- `--json` streams **NDJSON** (one compact snapshot per line).
-- `--summary` prints only the final totals object on exit.
-- `--seed` makes identities and schedule **reproducible** for fixtures.
-- `--device-ratio` flag (no local config file required).
-
-**TUI**
-- Full-screen, responsive dashboard that adapts to any terminal size and never
-  pushes the header/footer off screen; full-width selection highlight.
-- A proper config editor (Bubble Tea sub-models) replacing the old four-boolean
-  nested-modal state machine, with a nested URL-params → payloads editor.
 
 ## Install
 
 ```bash
-make build
-make install-local
+npm i -g hitmaker
+hitmaker --help
 ```
 
-The binary is `bin/hitmaker`; `install-local` symlinks it to `~/.local/bin`.
+The npm package ships a prebuilt native binary for your platform (macOS, Linux,
+and Windows on x64 or arm64). Node is used to install it, not to run it. There
+is no install script, so it works under `--ignore-scripts`.
+
+If you have Go 1.25 and would rather not go through npm:
+
+```bash
+go install github.com/zeb-link/hitmaker/cmd/hitmaker@latest
+```
+
+To build from a clone:
+
+```bash
+make build          # builds ./bin/hitmaker
+make install-local  # symlinks it into ~/.local/bin
+```
 
 ## Quick Start
 
@@ -98,6 +64,23 @@ Use `--factory` when you want to ignore saved `~/.hitmaker/config.json` and
 
 Text files accept one URL per line. Blank lines and `#` comments are ignored.
 
+## How it works
+
+Each target gets goroutine workers that share one keep-alive `http.Transport`,
+under a total worker cap. Workers alternate between active and idle phases to
+approximate human browsing rather than a flat request rate.
+
+Every hit is assembled from a rotating identity: a User-Agent, a referer, an
+`Accept-Language`, and — depending on the origin mode — a location and a fake
+source IP. Returning visitors are simulated by reusing `/24` subnets from a
+bounded LRU ring.
+
+Stats flow through a snapshot struct that both the TUI and the headless output
+read directly, so `--json` and the dashboard report the same numbers.
+
+`run` exits when `--for` elapses or on Ctrl-C. Shutdown is bounded, so it won't
+hang on a proxied connection that ignores cancellation.
+
 ### Redirects
 
 Hitmaker does **not** follow 3xx redirects by default. It is built to test
@@ -123,9 +106,6 @@ status instead. `probe` prints the status of the hop it stops on.
 | `--summary` | Suppress per-interval output; print only the final totals on exit. |
 | `--factory` | Ignore saved config; use built-in defaults. |
 
-`run` always exits promptly when `--for` elapses or on Ctrl-C; shutdown is
-bounded, so it never lingers even if a proxied connection is slow to close.
-
 ### Output for scripts and agents
 
 ```bash
@@ -135,7 +115,9 @@ hitmaker run --summary --for 30s URL               # human one-line final summar
 ```
 
 `--json` is line-delimited (NDJSON) — parse it one line at a time. Pair it with
-`--summary` when you only care about the totals at the end of a run.
+`--summary` when you only care about the totals at the end of a run. `--seed`
+makes identities and the schedule reproducible, which is what you want for
+fixtures.
 
 ## Modes
 
@@ -149,7 +131,7 @@ language, and method still rotate in every mode.
 | `vercel` | Direct requests plus `x-forwarded-for`, `x-real-ip`, and `x-vercel-ip-*` headers. |
 | `proxy` | Routes through a paid proxy provider; geo spoofing headers are disabled. |
 
-The first proxy adapter is `iproyal`:
+Proxy support is an adapter interface; the one adapter so far is `iproyal`:
 
 ```bash
 IPROYAL_URL='http://user:pass@geo.iproyal.com:12321' hitmaker run --mode proxy https://example.com
@@ -160,15 +142,13 @@ Proxy credentials are never printed by `config print`.
 
 ## Bots & AI crawlers
 
-Hitmaker can impersonate a wide range of well-known bot and AI-crawler
-identities (GPTBot, ClaudeBot, PerplexityBot, Googlebot, Slackbot, curl,
-python-requests, and dozens more). Each identity is sent as that agent's real,
-publicly documented User-Agent string, so any analytics that classify traffic by
-bot type will see and categorize the hits — handy for exercising bot dashboards
-and AI-traffic reporting on demand.
+Hitmaker can impersonate 78 well-known bot and AI-crawler identities (GPTBot,
+ClaudeBot, PerplexityBot, Googlebot, Slackbot, curl, python-requests, and dozens
+more). Each identity is sent as that agent's real, publicly documented
+User-Agent string, so analytics that classify traffic by bot type will see and
+categorize the hits.
 
-List the full catalog (add `--json` for a machine-readable version an agent can
-consume):
+List the full catalog (add `--json` for a machine-readable version):
 
 ```bash
 hitmaker bots
@@ -199,8 +179,7 @@ group the catalog by kind:
 
 ### Setting the ratio (two independent knobs)
 
-Bot traffic is controlled by two separate settings — this is the thing people
-trip over, so it's worth stating plainly:
+Bot traffic is controlled by two separate settings:
 
 1. **How much** of the traffic is bots — the **`Bot traffic %`** slider in the
    config editor, the `--bot-ratio` flag, or `unknownRatio` in config. `0` = all
@@ -235,9 +214,11 @@ Precedence is:
 3. Global `~/.hitmaker/config.json`
 4. Defaults
 
+A configured `0` (rate, ratio, odds) is honored rather than treated as unset, so
+you can pin a value to zero.
+
 Config files are written with mode `0600`; the global config directory uses
-`0700`. Old flat config keys such as `MIN_PER_MIN` and `PROXY_SERVICE_URL` are
-still read, but new saves use the typed nested shape:
+`0700`. Saves use the typed nested shape:
 
 ```json
 {
@@ -299,7 +280,7 @@ hitmaker links.txt
 
 ![Hitmaker config editor](docs/config.png)
 
-The dashboard is full-screen and adapts to any terminal size: a pinned header
+The dashboard is full-screen and adapts to the terminal size: a pinned header
 (totals) on top, the target table and a live recent-hits panel in the middle,
 and a pinned shortcut bar at the bottom. The recent-hits list is clamped to the
 window, so it never pushes the header or footer off screen. The selected row is
@@ -331,10 +312,9 @@ Config screen:
 | `D` | Restore defaults in the editor |
 | `Esc` | Back / discard and close |
 
-The config editor uses the same full-screen frame as the dashboard (title on
-top, shortcut bar pinned to the bottom) and highlights the focused field so you
-can see where you are as you move. Pressing `A` shows a preview; `Enter` there
-saves the config locally and closes the editor (from the live dashboard it also
+The config editor uses the same full-screen frame as the dashboard and
+highlights the focused field. Pressing `A` shows a preview; `Enter` there saves
+the config locally and closes the editor (from the live dashboard it also
 hot-reloads the running traffic). `Esc` discards edits.
 
 The **IDENTITY** group is where bot traffic is shaped: **Bot traffic %** sets how
@@ -342,14 +322,14 @@ much of the traffic is bots, **Bot pool** sets which bots, and **Desktop share %
 splits the remaining human traffic between desktop and mobile — see
 [Setting the ratio](#setting-the-ratio-two-independent-knobs).
 
-The URL params editor supports weighted payload variants for simulating QR,
-UTM, campaign, or other tracking payloads.
+The URL params editor supports weighted payload variants for simulating QR, UTM,
+campaign, or other attribution payloads.
 
 ## Safety
 
-Hitmaker caps total worker goroutines at `128` by default. It uses a shared
-keep-alive `http.Transport`, drains response bodies, and bounds returning-visitor
-subnet memory. Stats flow through structured snapshots, not log scraping.
+Hitmaker caps total worker goroutines at `128` by default, uses a shared
+keep-alive transport, drains response bodies, and bounds returning-visitor subnet
+memory.
 
 Avoid sustained high traffic against local build-on-demand dev servers. Use low
 rates for correctness checks and deployed/production-like targets for volume
@@ -363,8 +343,14 @@ make test           # go test ./...
 make fmt            # go fmt ./...
 make vet            # go vet ./...
 make install-local  # symlink bin/hitmaker into ~/.local/bin
-make release-check  # test, build release assets, dry-run npm package
+make release-check  # test, cross-compile, assemble and dry-run the npm packages
 ```
 
-See `RELEASE.md` for the GitHub-release + npm publish checklist. See
-`AGENTS.md` for the source-of-truth conventions for working in this repo.
+Releases are automatic: push a `v*` tag and CI publishes to npm. See
+`RELEASE.md` for the details, and `AGENTS.md` for the source-of-truth
+conventions for working in this repo.
+
+## Feedback
+
+Bug reports, missing bot identities, and ideas are all welcome — open an issue
+or email <support@zeblink.io>.
