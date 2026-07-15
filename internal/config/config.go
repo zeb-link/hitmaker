@@ -129,11 +129,11 @@ func Default() Config {
 			DeviceRatio:  60,
 			UnknownRatio: 5,
 			UniqueIPProb: 0.95,
-			URLParams: []URLParam{{
-				Key:         "qr",
-				Value:       "1",
-				Probability: 1,
-			}},
+			// No default URL params: targets are opaque URLs, and an
+			// injected param silently pollutes whatever query-string
+			// semantics the target system has. Params are strictly
+			// opt-in via config.
+			URLParams: nil,
 		},
 		Schedule: ScheduleConfig{
 			MinActive: 5,

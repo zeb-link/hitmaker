@@ -233,7 +233,7 @@ func (e configEditor) updateParams(msg tea.KeyMsg) (configEditor, configAction, 
 			e.paramFocus--
 		}
 	case "n", "+":
-		e.cfg.Requests.URLParams = append(e.cfg.Requests.URLParams, config.URLParam{Key: "qr", Value: "1", Probability: 100})
+		e.cfg.Requests.URLParams = append(e.cfg.Requests.URLParams, config.URLParam{Key: "param", Value: "1", Probability: 100})
 		e.paramFocus = len(e.cfg.Requests.URLParams) - 1
 	case "x", "delete", "backspace":
 		if len(params) > 0 {
