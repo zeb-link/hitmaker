@@ -5,12 +5,8 @@
   "bin": {
     "hitmaker": "bin/hitmaker.js"
   },
-  "scripts": {
-    "postinstall": "node install.js"
-  },
   "files": [
     "bin/hitmaker.js",
-    "install.js",
     "README.md",
     "LICENSE"
   ],
@@ -38,13 +34,12 @@
   "engines": {
     "node": ">=16"
   },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
-  ]
+  "optionalDependencies": {
+    "@zeb-link/hitmaker-darwin-arm64": "2.1.0",
+    "@zeb-link/hitmaker-darwin-x64": "2.1.0",
+    "@zeb-link/hitmaker-linux-arm64": "2.1.0",
+    "@zeb-link/hitmaker-linux-x64": "2.1.0",
+    "@zeb-link/hitmaker-win32-arm64": "2.1.0",
+    "@zeb-link/hitmaker-win32-x64": "2.1.0"
+  }
 }
