@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.3.0 - 2026-07-19
+
+### Changed
+
+- **Upgraded the whole Bubble Tea stack to Charm v2** — `bubbletea`, `bubbles`,
+  and `lipgloss` now come from the `charm.land/*/v2` module line (v2.0.8 /
+  v2.1.1 / v2.0.5). The migration adapts to v2's API: `View()` returns a
+  `tea.View` with a per-frame `AltScreen`, key handling dispatches on
+  `KeyPressMsg` (`Key().Text`, not `.Runes`), and theme colours are `var` not
+  `const`.
+- **New "Ember" visual identity** — a warm near-black ground with a single amber
+  accent, and soft **emerald (hits) / tomato (errors)** semantics. Focus is a
+  quiet amber left tick instead of a full-width bar; sliders are thin rails with
+  a knob; radio choices and shortcut hints share one chip treatment.
+- **The config editor's save flow is a floating dialog** — a bordered card with a
+  drop shadow composited over the still-visible deck (lipgloss v2 layer
+  compositor), with a clean one-value-per-row summary that can't wrap.
+- **A single `KeyHint` chip** backs every shortcut bar — the dashboard footer,
+  the config command bar, and the save-dialog buttons — so they match: a
+  brighter accent key, a muted label, on a muted ground.
+- **New intro animation** — the wordmark burns in on re-entry (a hot pink-white →
+  orange → red edge cooling to amber) over a scrolling warp-streak starfield, and
+  reads "MAKING THE HITS".
+
+### Fixed
+
+- Field-guide prose no longer orphans words onto their own lines — it was
+  double-wrapping (manual wrap, then a `Width`-constrained border re-wrapping at a
+  narrower text area). It now wraps once, at the border's real text width.
+
 ## 2.2.0 - 2026-07-19
 
 ### Added
