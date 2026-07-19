@@ -270,7 +270,7 @@ func (m Model) introView() string {
 	if m.width < 44 {
 		logo = m.animatedIntroText("HITMAKER")
 	}
-	subtitle := lipgloss.NewStyle().Foreground(theme.Muted).Render("making the hits")
+	subtitle := lipgloss.NewStyle().Foreground(theme.Muted).Render("MAKING THE HITS")
 	block := lipgloss.JoinVertical(lipgloss.Center, logo, "", subtitle)
 	bw, bh := lipgloss.Width(block), lipgloss.Height(block)
 	x := max(0, (m.width-bw)/2)

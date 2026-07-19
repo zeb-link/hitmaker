@@ -42,7 +42,7 @@ func TestIntroViewRendersAnimatedBanner(t *testing.T) {
 	if !strings.ContainsAny(plain, "█▀▄") {
 		t.Fatalf("intro missing block wordmark:\n%s", plain)
 	}
-	if !strings.Contains(plain, "making the hits") {
+	if !strings.Contains(plain, "MAKING THE HITS") {
 		t.Fatalf("intro missing subtitle:\n%s", plain)
 	}
 }
