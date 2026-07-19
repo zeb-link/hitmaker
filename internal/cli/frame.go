@@ -14,7 +14,7 @@ import (
 func newFrameCommand(root *rootOptions) *cobra.Command {
 	var width, height int
 	cmd := &cobra.Command{
-		Use:    "frame [dashboard|config]",
+		Use:    "frame [dashboard|config|intro]",
 		Short:  "Render one sample TUI frame (for docs screenshots)",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -25,6 +25,8 @@ func newFrameCommand(root *rootOptions) *cobra.Command {
 			switch which {
 			case "config":
 				fmt.Println(tui.SampleConfig(width, height))
+			case "intro", "splash":
+				fmt.Println(tui.SampleIntro(width, height))
 			default:
 				fmt.Println(tui.SampleDashboard(width, height))
 			}

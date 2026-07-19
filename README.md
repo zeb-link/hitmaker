@@ -4,6 +4,8 @@
 [![npm](https://img.shields.io/npm/v/hitmaker)](https://www.npmjs.com/package/hitmaker)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+![Hitmaker](docs/intro.png)
+
 Synthetic traffic for testing analytics, redirect services, and click-tracking
 systems. Hitmaker sends realistic-looking HTTP requests to plain target URLs,
 with rotating browser identity, referers, language, geo headers, and human-like

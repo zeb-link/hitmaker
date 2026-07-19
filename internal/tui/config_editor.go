@@ -612,74 +612,60 @@ func (e configEditor) View(width, height int, err error) string {
 	return base
 }
 
+// frameView mirrors the dashboard frame exactly — a flush header with a bottom
+// rule, an inset body, and a padded footer, using the same pane widths and
+// heights — so switching between the dashboard and the config editor never shifts
+// the header, footer, or right-hand panel. Only the contents differ: the deck
+// stands in for the link table, and the field guide for the recent-hits panel.
 func (e configEditor) frameView(width, height int, err error) string {
-	contentWidth := max(1, width-bodyInsetX*2)
-	title := e.titleView(contentWidth)
 	status := e.status
 	if err != nil {
 		status = err.Error()
 	}
-	// Top-aligned, full-screen, with the shortcut bar pinned to the bottom — the
-	// same frame shape as the live dashboard, so switching between them doesn't
-	// jump the content around. Everything is sized from the real terminal height
-	// so it adapts to any size.
-	commands := e.commandBar(width - bodyInsetX*2)
-	footer := theme.Subtle.Render(status)
-	// Match the deck's left inset and leave a blank line of bottom margin so the
-	// hint bar isn't jammed against the window edges.
-	bottom := insetBlock(lipgloss.JoinVertical(lipgloss.Left, commands, footer, ""), bodyInsetX, 0)
-
-	fillTo := height - lipgloss.Height(bottom)
-	if fillTo < 6 {
-		fillTo = 6
+	header := e.headerLine(width, status)
+	footer := e.footerBar(width)
+	bodyHeight := height - lipgloss.Height(header) - lipgloss.Height(footer)
+	if bodyHeight < 3 {
+		bodyHeight = 3
 	}
-	contentHeight := max(5, fillTo-bodyInsetY)
-	panelWidth := max(46, contentWidth)
-	var body string
+	contentWidth := max(1, width-bodyInsetX*2)
+	contentHeight := max(1, bodyHeight-bodyInsetY)
+	leftWidth, rightWidth := dashboardPaneWidths(contentWidth)
+
+	var main string
 	switch e.pane {
 	case paneParams, panePayloads:
-		body = e.detailView(panelWidth, contentHeight)
+		main = e.detailView(contentWidth, contentHeight)
 	default:
-		deckHeight := contentHeight - lipgloss.Height(title) - 2 // title + blank line + breathing room
-		if deckHeight < 5 {
-			deckHeight = 5
-		}
-		leftWidth, helpWidth := e.editorColumnWidths(panelWidth)
-		if helpWidth > 0 && deckHeight >= 18 {
-			deck := e.fieldsView(leftWidth, deckHeight)
-			guide := e.fieldGuideView(helpWidth, deckHeight)
-			body = lipgloss.JoinHorizontal(lipgloss.Top, deck, " ", guide)
+		deck := e.fieldsView(leftWidth, contentHeight)
+		if rightWidth >= 34 {
+			guide := e.fieldGuideView(rightWidth, contentHeight)
+			main = lipgloss.JoinHorizontal(lipgloss.Top,
+				lipgloss.NewStyle().Width(leftWidth).Render(deck), " ", guide)
 		} else {
-			showHint := deckHeight >= 22
-			if showHint {
-				deckHeight--
-			}
-			deck := e.fieldsView(panelWidth, deckHeight)
-			body = deck
-			if showHint {
-				hint := lipgloss.NewStyle().Width(panelWidth).Render(e.fieldHintLine(panelWidth))
-				body = lipgloss.JoinVertical(lipgloss.Left, deck, hint)
-			}
-		}
-		if body == "" {
-			deck := e.fieldsView(panelWidth, deckHeight)
-			hint := lipgloss.NewStyle().Width(panelWidth).Render(e.fieldHintLine(panelWidth))
-			body = lipgloss.JoinVertical(lipgloss.Left, deck, hint)
+			main = deck
 		}
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left, title, "", body)
-	content = insetBlock(content, bodyInsetX, bodyInsetY)
-	content = lipgloss.NewStyle().Width(width).Height(fillTo).MaxHeight(fillTo).Render(content)
-	return lipgloss.JoinVertical(lipgloss.Left, content, bottom)
+	main = insetBlock(main, bodyInsetX, bodyInsetY)
+	main = lipgloss.NewStyle().Width(width).Height(bodyHeight).MaxHeight(bodyHeight).Render(main)
+	return lipgloss.JoinVertical(lipgloss.Left, header, main, footer)
 }
 
-func (e configEditor) titleView(width int) string {
-	left := lipgloss.JoinHorizontal(lipgloss.Center,
-		theme.Logo.Render("HITMAKER CONFIG"),
-		"  ",
-		theme.Subtle.Render("traffic cockpit"),
-	)
-	return lipgloss.NewStyle().Width(width).Render(left)
+// headerLine matches the dashboard header's shape (flush top, full width, bottom
+// rule, same height). The text reads dim/inactive versus the live dashboard.
+func (e configEditor) headerLine(width int, status string) string {
+	line := " " + theme.Logo.Render("HITMAKER") + theme.Subtle.Render("  configure")
+	if status != "" {
+		line += theme.Subtle.Render("   ·   " + status)
+	}
+	return lipgloss.NewStyle().Width(width).MaxHeight(2).
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(theme.Dim).Render(line)
+}
+
+// footerBar matches the dashboard footer (same chip style, padding, and height).
+func (e configEditor) footerBar(width int) string {
+	return lipgloss.NewStyle().Width(width).Padding(1, bodyInsetX, 1, bodyInsetX).Render(e.commandBar())
 }
 
 func (e configEditor) editorColumnWidths(width int) (int, int) {
@@ -704,7 +690,7 @@ func (e configEditor) editorColumnWidths(width int) (int, int) {
 
 // commandBar is the shared shortcut-chip hint line (theme.KeyHint), the same
 // treatment used on the dashboard footer. The full set hides behind "?".
-func (e configEditor) commandBar(width int) string {
+func (e configEditor) commandBar() string {
 	parts := []string{
 		theme.KeyHint("↑↓", "move"),
 		theme.KeyHint("←→", "adjust"),
@@ -724,7 +710,7 @@ func (e configEditor) commandBar(width int) string {
 	} else {
 		parts = append(parts, theme.KeyHint("?", "keys"))
 	}
-	return lipgloss.NewStyle().Width(width).MaxHeight(2).Render(strings.Join(parts, " "))
+	return strings.Join(parts, " ")
 }
 
 func (e configEditor) editView(width, height int) string {
@@ -747,9 +733,8 @@ func (e configEditor) editView(width, height int) string {
 }
 
 func (e configEditor) fieldsView(width, height int) string {
-	// Width is the final outer pane width. theme.Border adds border (2) and
-	// horizontal padding (2), so the text/highlight area is width-4.
-	innerWidth := max(20, width-4)
+	// Free-floating (no border), like the dashboard's link list.
+	innerWidth := max(20, width-2)
 	lines := []string{theme.Title.Render("CONTROL DECK")}
 	lastGroup := ""
 	selectedLine := 1
@@ -777,8 +762,8 @@ func (e configEditor) fieldsView(width, height int) string {
 			lines = append(lines, line)
 		}
 	}
-	lines = clipAround(lines, selectedLine, max(5, height-2))
-	return theme.Border.Width(innerWidth).Render(strings.Join(lines, "\n"))
+	lines = clipAround(lines, selectedLine, max(5, height))
+	return lipgloss.NewStyle().Width(innerWidth).Render(strings.Join(lines, "\n"))
 }
 
 func (e configEditor) detailView(width, height int) string {
@@ -822,9 +807,8 @@ func (e configEditor) fieldGuideView(width, height int) string {
 	field := e.fields[e.focus]
 	guide := e.fieldGuide(field)
 	innerWidth := max(20, width-4)
-	// The border draws its own frame (border + padding). Wrap prose to the real
-	// text area inside that frame, so lipgloss doesn't re-wrap our lines and
-	// orphan the last word of each one.
+	// Bordered, same as the dashboard's recent-hits panel. Wrap prose to the real
+	// text area inside the border+padding so lipgloss doesn't re-wrap and orphan.
 	textWidth := max(12, innerWidth-theme.Border.GetHorizontalFrameSize())
 	lines := []string{
 		theme.Title.Render("FIELD GUIDE"),
@@ -848,8 +832,7 @@ func (e configEditor) fieldGuideView(width, height int) string {
 	if len(lines) > maxLines {
 		lines = append(lines[:maxLines-1], theme.Subtle.Render("…"))
 	}
-	body := padLines(lines, max(0, height-2))
-	return theme.Border.Width(innerWidth).Render(body)
+	return theme.Border.Width(innerWidth).Render(padLines(lines, max(0, height-2)))
 }
 
 func (e configEditor) fieldInstructions(field editorField) string {

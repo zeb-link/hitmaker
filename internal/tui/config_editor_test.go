@@ -174,7 +174,7 @@ func TestConfigEditorDimsProxyFieldsWhenNotProxyMode(t *testing.T) {
 		}
 	}
 	view := editor.View(120, 36, nil)
-	if !contains(view, "Disabled until Origin mode is Auto or Proxy service.") {
+	if !contains(view, "Enable Auto or Proxy service") {
 		t.Fatalf("proxy disabled help missing:\n%s", view)
 	}
 }
