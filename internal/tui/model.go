@@ -587,10 +587,10 @@ func insetBlock(block string, left, top int) string {
 
 func (m Model) footerView() string {
 	parts := []string{
-		theme.Pill.Render("↑/↓ navigate"),
-		theme.Pill.Render("K pause"),
-		theme.Pill.Render("C config"),
-		theme.Pill.Render("Q quit"),
+		theme.KeyHint("↑↓", "navigate"),
+		theme.KeyHint("K", "pause"),
+		theme.KeyHint("C", "config"),
+		theme.KeyHint("Q", "quit"),
 	}
 	return lipgloss.NewStyle().Width(m.width).Padding(1, bodyInsetX, 1, bodyInsetX).Render(strings.Join(parts, " "))
 }

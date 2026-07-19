@@ -53,6 +53,28 @@ var (
 	// emerald ground.
 	Live = lipgloss.NewStyle().Foreground(lipgloss.Color("#5fd39b")).Background(lipgloss.Color("#123528")).Bold(true).Padding(0, 1)
 
+	// keyCap / keyLabel / keyChip back the shared KeyHint chip: a bright accent
+	// key and a muted label on a muted ground. Defined once so the dashboard
+	// footer, the config command bar, and the save-dialog buttons all match.
+	// Each segment carries the Panel ground so the chip fill stays continuous
+	// across the key→label color change (an inner reset would otherwise drop it).
+	keyCap   = lipgloss.NewStyle().Foreground(Accent).Background(Panel).Bold(true)
+	keyLabel = lipgloss.NewStyle().Foreground(Muted).Background(Panel)
+	keyChip  = lipgloss.NewStyle().Background(Panel).Padding(0, 1)
+)
+
+// KeyHint renders one keyboard-shortcut chip — a brighter accent key followed by
+// a muted label, on the muted chip ground. This is the single source of truth for
+// every shortcut/hint bar in the app.
+func KeyHint(key, label string) string {
+	body := keyCap.Render(key)
+	if label != "" {
+		body += keyLabel.Render(" " + label)
+	}
+	return keyChip.Render(body)
+}
+
+var (
 	// Tick is the left accent marker used to indicate the focused row. It is a
 	// single amber cell — quiet, and (unlike a width-padded background) it can
 	// never wrap the row.

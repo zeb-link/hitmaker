@@ -702,33 +702,29 @@ func (e configEditor) editorColumnWidths(width int) (int, int) {
 	return left, right
 }
 
-// commandBar is a calm, low-noise hint line: amber keys, dim descriptions,
-// mid-dot spacing. The full shortcut set stays hidden behind "?" until asked for.
+// commandBar is the shared shortcut-chip hint line (theme.KeyHint), the same
+// treatment used on the dashboard footer. The full set hides behind "?".
 func (e configEditor) commandBar(width int) string {
-	hint := func(k, desc string) string {
-		return theme.Focus.Render(k) + theme.Subtle.Render(" "+desc)
-	}
-	sep := theme.Subtle.Render("   ")
 	parts := []string{
-		hint("↑↓", "move"),
-		hint("←→", "adjust"),
-		hint("type", "set"),
-		hint("A", "save & close"),
-		hint("Esc", "back"),
+		theme.KeyHint("↑↓", "move"),
+		theme.KeyHint("←→", "adjust"),
+		theme.KeyHint("type", "set"),
+		theme.KeyHint("A", "save & close"),
+		theme.KeyHint("Esc", "back"),
 	}
 	if e.showKeys {
 		parts = append(parts,
-			hint("Tab", "next"),
-			hint("Enter", "open"),
-			hint("G", "save global"),
-			hint("L", "save local"),
-			hint("D", "defaults"),
-			hint("?", "less"),
+			theme.KeyHint("Tab", "next"),
+			theme.KeyHint("Enter", "open"),
+			theme.KeyHint("G", "save global"),
+			theme.KeyHint("L", "save local"),
+			theme.KeyHint("D", "defaults"),
+			theme.KeyHint("?", "less"),
 		)
 	} else {
-		parts = append(parts, hint("?", "keys"))
+		parts = append(parts, theme.KeyHint("?", "keys"))
 	}
-	return lipgloss.NewStyle().Width(width).MaxHeight(2).Render(strings.Join(parts, sep))
+	return lipgloss.NewStyle().Width(width).MaxHeight(2).Render(strings.Join(parts, " "))
 }
 
 func (e configEditor) editView(width, height int) string {
@@ -1047,10 +1043,8 @@ func (e configEditor) saveCard(width int, err error) string {
 	if err != nil {
 		lines = append(lines, "", theme.Bad.Render(err.Error()))
 	}
-	// Controls left-aligned, Esc (back) before Enter (save & close).
-	esc := theme.Focus.Render("Esc") + theme.Subtle.Render(" back")
-	enter := theme.Focus.Render("Enter") + theme.Subtle.Render(" save & close")
-	lines = append(lines, "", esc+"     "+enter)
+	// Controls as the shared shortcut chips, left-aligned, Esc before Enter.
+	lines = append(lines, "", theme.KeyHint("Esc", "back")+"  "+theme.KeyHint("Enter", "save & close"))
 
 	return card.Width(boxWidth).Render(strings.Join(lines, "\n"))
 }
