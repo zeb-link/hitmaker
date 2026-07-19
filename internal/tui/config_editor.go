@@ -1045,12 +1045,10 @@ func (e configEditor) saveCard(width int, err error) string {
 	if err != nil {
 		lines = append(lines, "", theme.Bad.Render(err.Error()))
 	}
-	// Dialog-style controls: cancel on the left, primary (Enter) rightmost, the
-	// whole group right-aligned.
+	// Controls left-aligned, Esc (back) before Enter (save & close).
 	esc := theme.Focus.Render("Esc") + theme.Subtle.Render(" back")
 	enter := theme.Focus.Render("Enter") + theme.Subtle.Render(" save & close")
-	buttons := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Right).Render(esc + "     " + enter)
-	lines = append(lines, "", buttons)
+	lines = append(lines, "", esc+"     "+enter)
 
 	return card.Width(boxWidth).Render(strings.Join(lines, "\n"))
 }
