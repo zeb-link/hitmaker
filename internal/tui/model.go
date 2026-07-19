@@ -223,30 +223,38 @@ func (m Model) introView() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
 }
 
+// animatedBanner paints the block wordmark in amber with a gold shimmer sweeping
+// left to right, led by an emerald crest — cohesive with the Ember palette
+// (amber + gold + a single complementary green) rather than a rainbow.
 func (m Model) animatedBanner() string {
 	elapsed := time.Since(m.introStart)
 	if m.introStart.IsZero() {
 		elapsed = 0
 	}
-	phase := int(elapsed / (90 * time.Millisecond))
-	styles := []lipgloss.Style{
-		lipgloss.NewStyle().Foreground(theme.HotPink).Bold(true),
-		lipgloss.NewStyle().Foreground(theme.Cyan).Bold(true),
-		lipgloss.NewStyle().Foreground(theme.Mint).Bold(true),
-		lipgloss.NewStyle().Foreground(theme.Amber).Bold(true),
-	}
+	// The wave sweeps across the wordmark once over the intro, with a short
+	// lead-in from off the left edge.
+	wave := int(elapsed/(20*time.Millisecond)) - 4
+	base := lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
+	glow := lipgloss.NewStyle().Foreground(theme.Gold).Bold(true)
+	crest := lipgloss.NewStyle().Foreground(theme.Emerald).Bold(true)
 	rows := make([]string, len(hitmakerBanner))
 	for row, line := range hitmakerBanner {
-		parts := make([]string, 0, len(line))
+		var b strings.Builder
 		for col, r := range line {
 			if r == ' ' {
-				parts = append(parts, " ")
+				b.WriteByte(' ')
 				continue
 			}
-			style := styles[(phase+col+row)%len(styles)]
-			parts = append(parts, style.Render(string(r)))
+			switch d := col - wave; {
+			case d == 0:
+				b.WriteString(crest.Render(string(r)))
+			case d >= -2 && d <= 1:
+				b.WriteString(glow.Render(string(r)))
+			default:
+				b.WriteString(base.Render(string(r)))
+			}
 		}
-		rows[row] = strings.Join(parts, "")
+		rows[row] = b.String()
 	}
 	return strings.Join(rows, "\n")
 }
@@ -256,19 +264,24 @@ func (m Model) animatedIntroText(text string) string {
 	if m.introStart.IsZero() {
 		elapsed = 0
 	}
-	phase := int(elapsed / (90 * time.Millisecond))
-	styles := []lipgloss.Style{
-		lipgloss.NewStyle().Foreground(theme.HotPink).Bold(true),
-		lipgloss.NewStyle().Foreground(theme.Cyan).Bold(true),
-		lipgloss.NewStyle().Foreground(theme.Mint).Bold(true),
-	}
+	wave := int(elapsed/(20*time.Millisecond)) - 2
+	base := lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
+	glow := lipgloss.NewStyle().Foreground(theme.Gold).Bold(true)
+	crest := lipgloss.NewStyle().Foreground(theme.Emerald).Bold(true)
 	parts := make([]string, 0, len(text))
 	for i, r := range text {
 		if r == ' ' {
 			parts = append(parts, " ")
 			continue
 		}
-		parts = append(parts, styles[(phase+i)%len(styles)].Render(string(r)))
+		switch d := i - wave; {
+		case d == 0:
+			parts = append(parts, crest.Render(string(r)))
+		case d >= -1 && d <= 1:
+			parts = append(parts, glow.Render(string(r)))
+		default:
+			parts = append(parts, base.Render(string(r)))
+		}
 	}
 	return strings.Join(parts, "")
 }

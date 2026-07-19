@@ -20,17 +20,15 @@ var (
 	// Accent — the one bold color. Everything focus/active is amber.
 	Accent    = lipgloss.Color("#d9a441")
 	AccentDim = lipgloss.Color("#3a2c17") // soft amber wash for active chips
+	Gold      = lipgloss.Color("#f0d68c") // brighter amber, for the intro shimmer
+	Shadow    = lipgloss.Color("#07060a") // drop-shadow ground for floating panels
 
 	// Semantic, kept distinct from the accent: success vs failure.
 	Emerald = lipgloss.Color("#4cc38a") // hits / success
 	Tomato  = lipgloss.Color("#ec6142") // errors / miss
 
-	// Retro banner ramp — a warm rainbow nod for the intro wordmark only.
-	HotPink = lipgloss.Color("#e0857a") // coral
-	Cyan    = lipgloss.Color("#6fb3a8") // dim teal — the one cool note
-	Mint    = lipgloss.Color("#9fc08a") // sage
-	Amber   = Accent
-	Red     = Tomato
+	// Amber aliases the accent for the intro shimmer's base tone.
+	Amber = Accent
 )
 
 var (

@@ -67,6 +67,7 @@ type configEditor struct {
 	status       string
 	typingKey    string
 	typingValue  string
+	showKeys     bool
 }
 
 func newConfigEditor(cfg config.Config) configEditor {
@@ -147,6 +148,9 @@ func (e configEditor) Update(msg tea.KeyMsg) (configEditor, configAction, tea.Cm
 		return e, configActionSaveLocal, nil
 	case "d":
 		return e, configActionDefaults, nil
+	case "?":
+		e.showKeys = !e.showKeys
+		return e, configActionNone, nil
 	}
 
 	switch e.pane {
@@ -598,14 +602,19 @@ func (e configEditor) View(width, height int, err error) string {
 	if width < 70 {
 		width = 70
 	}
-	contentWidth := max(1, width-bodyInsetX*2)
-	title := e.titleView(contentWidth)
 	if e.editing {
 		return e.editView(width, height)
 	}
+	base := e.frameView(width, height, err)
 	if e.pane == paneConfirmApply {
-		return e.applyPreviewView(width, height, err)
+		return e.applyModal(width, height, base, err)
 	}
+	return base
+}
+
+func (e configEditor) frameView(width, height int, err error) string {
+	contentWidth := max(1, width-bodyInsetX*2)
+	title := e.titleView(contentWidth)
 	status := e.status
 	if err != nil {
 		status = err.Error()
@@ -691,33 +700,33 @@ func (e configEditor) editorColumnWidths(width int) (int, int) {
 	return left, right
 }
 
+// commandBar is a calm, low-noise hint line: amber keys, dim descriptions,
+// mid-dot spacing. The full shortcut set stays hidden behind "?" until asked for.
 func (e configEditor) commandBar(width int) string {
+	hint := func(k, desc string) string {
+		return theme.Focus.Render(k) + theme.Subtle.Render(" "+desc)
+	}
+	sep := theme.Subtle.Render("   ")
 	parts := []string{
-		theme.PillHot.Render("SHORTCUTS"),
-		theme.Pill.Render("Tab next"),
-		theme.Pill.Render("Type numbers"),
-		theme.Pill.Render("←/→ nudge"),
-		theme.Pill.Render("Enter next/open"),
-		theme.PillHot.Render("A save & close"),
-		theme.Pill.Render("G save global"),
-		theme.Pill.Render("L save local"),
-		theme.Pill.Render("D defaults"),
-		theme.Pill.Render("Esc back"),
+		hint("↑↓", "move"),
+		hint("←→", "adjust"),
+		hint("type", "set"),
+		hint("A", "save & close"),
+		hint("Esc", "back"),
 	}
-	if width < 96 {
-		parts = []string{
-			theme.PillHot.Render("KEYS"),
-			theme.Pill.Render("Tab"),
-			theme.Pill.Render("Type #"),
-			theme.Pill.Render("←/→"),
-			theme.Pill.Render("Enter next"),
-			theme.PillHot.Render("A save+close"),
-			theme.Pill.Render("G global"),
-			theme.Pill.Render("L local"),
-			theme.Pill.Render("Esc"),
-		}
+	if e.showKeys {
+		parts = append(parts,
+			hint("Tab", "next"),
+			hint("Enter", "open"),
+			hint("G", "save global"),
+			hint("L", "save local"),
+			hint("D", "defaults"),
+			hint("?", "less"),
+		)
+	} else {
+		parts = append(parts, hint("?", "keys"))
 	}
-	return lipgloss.NewStyle().Width(width).Render(strings.Join(parts, " "))
+	return lipgloss.NewStyle().Width(width).MaxHeight(2).Render(strings.Join(parts, sep))
 }
 
 func (e configEditor) editView(width, height int) string {
@@ -1000,45 +1009,67 @@ func wrapBullet(text string, width int) []string {
 	return wrapped
 }
 
-func (e configEditor) applyPreviewView(width, height int, err error) string {
-	boxWidth := min(92, max(56, width-8))
+// applyModal floats the save card over the (still-visible) control deck with a
+// soft drop shadow, using lipgloss v2's layer compositor.
+func (e configEditor) applyModal(width, height int, base string, err error) string {
+	card := e.saveCard(width, err)
+	cw := lipgloss.Width(card)
+	ch := lipgloss.Height(card)
+	x := max(0, (width-cw)/2)
+	y := max(1, (height-ch)/2)
+
+	shadowRow := lipgloss.NewStyle().Background(theme.Shadow).Render(strings.Repeat(" ", cw))
+	shadowLines := make([]string, ch)
+	for i := range shadowLines {
+		shadowLines[i] = shadowRow
+	}
+	shadow := strings.Join(shadowLines, "\n")
+
+	return lipgloss.NewCompositor(
+		lipgloss.NewLayer(base).Z(0),
+		lipgloss.NewLayer(shadow).X(x+2).Y(y+1).Z(1),
+		lipgloss.NewLayer(card).X(x).Y(y).Z(2),
+	).Render()
+}
+
+func (e configEditor) saveCard(width int, err error) string {
+	boxWidth := min(70, max(48, width-16))
 	lines := []string{
-		theme.Title.Render("SAVE & CLOSE"),
-		theme.Subtle.Render("Review the settings below. Enter saves to ./.hitmaker.json and closes."),
+		theme.Title.Render("Save & close"),
+		theme.Subtle.Render("Review your changes."),
 		"",
 	}
 	lines = append(lines, e.previewLines()...)
 	if err != nil {
 		lines = append(lines, "", theme.Bad.Render(err.Error()))
 	}
-	lines = append(lines, "", theme.PillHot.Render("Enter save & close")+" "+theme.Pill.Render("Esc back"))
-	box := theme.FocusBorder.Width(boxWidth).Render(strings.Join(lines, "\n"))
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+	lines = append(lines, "",
+		theme.Focus.Render("Enter")+theme.Subtle.Render(" save & close")+
+			theme.Subtle.Render("      ")+
+			theme.Focus.Render("Esc")+theme.Subtle.Render(" back"))
+	return theme.FocusBorder.Width(boxWidth).Render(strings.Join(lines, "\n"))
 }
 
 func (e configEditor) previewLines() []string {
 	cfg := e.cfg
+	row := func(label, value string) string {
+		return theme.Focus.Render(fmt.Sprintf("%-11s ", label)) + value
+	}
+	entropy := "off — every link identical"
+	if cfg.Entropy.Level != config.EntropyOff {
+		sp, br, vi := cfg.Entropy.EffectiveHuman()
+		entropy = fmt.Sprintf("%s — audience ±%d%%, breakout %d%%, %d%% viral",
+			strings.ToLower(entropyLevelLabel(cfg.Entropy.Level)), sp, br, vi)
+	}
 	return []string{
-		theme.Focus.Render("TRAFFIC"),
-		fmt.Sprintf("  %s  %d-%d hits/min across %d worker(s)", meter(float64(cfg.Traffic.MaxPerMin), 100), cfg.Traffic.MinPerMin, cfg.Traffic.MaxPerMin, cfg.Traffic.Concurrent),
-		"",
-		theme.Focus.Render("IDENTITY"),
-		fmt.Sprintf("  Bot traffic %s %d%%", meter(float64(cfg.Requests.UnknownRatio), 100), cfg.Requests.UnknownRatio),
-		fmt.Sprintf("  Bot pool    %s", botPoolLabel(cfg.Requests.Bots)),
-		fmt.Sprintf("  Desktop     %s %d%% of human hits", meter(float64(cfg.Requests.DeviceRatio), 100), cfg.Requests.DeviceRatio),
-		fmt.Sprintf("  Unique IP   %s %.0f%%", meter(cfg.Requests.UniqueIPProb*100, 100), cfg.Requests.UniqueIPProb*100),
-		"",
-		theme.Focus.Render("SCHEDULE"),
-		fmt.Sprintf("  Active %d-%d min, idle %.0f%% for %d-%d min", cfg.Schedule.MinActive, cfg.Schedule.MaxActive, cfg.Schedule.IdleOdds*100, cfg.Schedule.MinIdle, cfg.Schedule.MaxIdle),
-		"",
-		theme.Focus.Render("ENTROPY"),
-		entropyPreviewLine(cfg.Entropy),
-		"",
-		theme.Focus.Render("ORIGIN"),
-		modeLabel(cfg.Origin.Mode),
-		"",
-		theme.Focus.Render("URL PARAMS"),
-		fmt.Sprintf("%d parameter rules, %d payload variants", len(cfg.Requests.URLParams), countPayloads(cfg.Requests.URLParams)),
+		row("Traffic", fmt.Sprintf("%d–%d hits/min · %d worker(s)", cfg.Traffic.MinPerMin, cfg.Traffic.MaxPerMin, cfg.Traffic.Concurrent)),
+		row("Identity", fmt.Sprintf("bot %d%% · %s · desktop %d%% · unique IP %.0f%%",
+			cfg.Requests.UnknownRatio, botPoolLabel(cfg.Requests.Bots), cfg.Requests.DeviceRatio, cfg.Requests.UniqueIPProb*100)),
+		row("Schedule", fmt.Sprintf("active %d–%dm · idle %.0f%% for %d–%dm",
+			cfg.Schedule.MinActive, cfg.Schedule.MaxActive, cfg.Schedule.IdleOdds*100, cfg.Schedule.MinIdle, cfg.Schedule.MaxIdle)),
+		row("Entropy", entropy),
+		row("Origin", modeLabel(cfg.Origin.Mode)),
+		row("URL params", fmt.Sprintf("%d rule(s) · %d payload(s)", len(cfg.Requests.URLParams), countPayloads(cfg.Requests.URLParams))),
 	}
 }
 
@@ -1057,15 +1088,6 @@ func entropyLevelLabel(level config.EntropyLevel) string {
 	default:
 		return string(level)
 	}
-}
-
-func entropyPreviewLine(e config.EntropyConfig) string {
-	label := entropyLevelLabel(e.Level)
-	if e.Level == config.EntropyOff {
-		return fmt.Sprintf("  %s — every link identical", label)
-	}
-	spread, breakout, viral := e.EffectiveHuman()
-	return fmt.Sprintf("  %s — audience ±%d%%, breakout %d%%, %d%% viral links", label, spread, breakout, viral)
 }
 
 func (e configEditor) paramsView(width int) string {
@@ -1281,16 +1303,6 @@ func slider(value, minValue, maxValue float64) string {
 		return fmt.Sprintf("%s   %.0f%%", bar, value*100)
 	}
 	return fmt.Sprintf("%s   %.0f", bar, value)
-}
-
-func meter(value, maxValue float64) string {
-	const cells = 12
-	ratio := 0.0
-	if maxValue > 0 {
-		ratio = value / maxValue
-	}
-	filled := clampInt(int(ratio*cells+0.5), 0, cells)
-	return theme.Focus.Render(strings.Repeat("▰", filled)) + theme.Subtle.Render(strings.Repeat("▱", cells-filled))
 }
 
 func segment(active string, values []string) string {

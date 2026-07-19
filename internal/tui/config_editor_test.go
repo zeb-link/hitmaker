@@ -53,7 +53,7 @@ func TestConfigEditorViewShowsCommandBarAndSections(t *testing.T) {
 	// Tall enough that the whole control deck fits without scrolling — the deck
 	// grew an ENTROPY group, so URL PARAMS (the last row) needs the extra height.
 	view := editor.View(120, 60, nil)
-	for _, want := range []string{"TRAFFIC", "IDENTITY", "SCHEDULE", "ENTROPY", "ORIGIN", "SHORTCUTS", "URL PARAMS", "Type numbers"} {
+	for _, want := range []string{"TRAFFIC", "IDENTITY", "SCHEDULE", "ENTROPY", "ORIGIN", "URL PARAMS", "save & close", "move"} {
 		if !contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -155,8 +155,8 @@ func TestConfigEditorApplyShowsPreviewBeforeAction(t *testing.T) {
 		t.Fatalf("pane = %v, want confirm apply", editor.pane)
 	}
 	view := editor.View(100, 30, nil)
-	if !contains(view, "SAVE & CLOSE") || !contains(view, "TRAFFIC") {
-		t.Fatalf("apply preview missing expected content:\n%s", view)
+	if !contains(view, "Save & close") || !contains(view, "hits/min") {
+		t.Fatalf("apply modal missing expected content:\n%s", view)
 	}
 	editor, action, _ = editor.Update(keyMsg("enter"))
 	if action != configActionApply {
@@ -185,7 +185,7 @@ func TestConfigEditorFitsStandardTerminal(t *testing.T) {
 	if got := lipgloss.Height(view); got > 24 {
 		t.Fatalf("view height = %d, want <= 24:\n%s", got, view)
 	}
-	for _, want := range []string{"CONTROL DECK", "KEYS"} {
+	for _, want := range []string{"CONTROL DECK", "move"} {
 		if !contains(view, want) {
 			t.Fatalf("compact view missing %q:\n%s", want, view)
 		}
