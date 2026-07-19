@@ -155,7 +155,7 @@ func TestConfigEditorApplyShowsPreviewBeforeAction(t *testing.T) {
 		t.Fatalf("pane = %v, want confirm apply", editor.pane)
 	}
 	view := editor.View(100, 30, nil)
-	if !contains(view, "Save & close") || !contains(view, "hits/min") {
+	if !contains(view, "Apply changes") || !contains(view, "hits/min") {
 		t.Fatalf("apply modal missing expected content:\n%s", view)
 	}
 	editor, action, _ = editor.Update(keyMsg("enter"))

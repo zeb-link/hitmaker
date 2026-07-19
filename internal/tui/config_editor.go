@@ -1033,43 +1033,57 @@ func (e configEditor) applyModal(width, height int, base string, err error) stri
 }
 
 func (e configEditor) saveCard(width int, err error) string {
-	boxWidth := min(70, max(48, width-16))
-	lines := []string{
-		theme.Title.Render("Save & close"),
-		theme.Subtle.Render("Review your changes."),
-		"",
-	}
-	lines = append(lines, e.previewLines()...)
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Accent).
+		Padding(1, 3)
+	boxWidth := min(72, max(56, width-14))
+	contentWidth := max(20, boxWidth-card.GetHorizontalFrameSize())
+
+	lines := []string{theme.Title.Render("Apply changes"), ""}
+	lines = append(lines, e.previewLines(contentWidth)...)
 	if err != nil {
 		lines = append(lines, "", theme.Bad.Render(err.Error()))
 	}
-	lines = append(lines, "",
-		theme.Focus.Render("Enter")+theme.Subtle.Render(" save & close")+
-			theme.Subtle.Render("      ")+
-			theme.Focus.Render("Esc")+theme.Subtle.Render(" back"))
-	return theme.FocusBorder.Width(boxWidth).Render(strings.Join(lines, "\n"))
+	// Dialog-style controls: cancel on the left, primary (Enter) rightmost, the
+	// whole group right-aligned.
+	esc := theme.Focus.Render("Esc") + theme.Subtle.Render(" back")
+	enter := theme.Focus.Render("Enter") + theme.Subtle.Render(" save & close")
+	buttons := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Right).Render(esc + "     " + enter)
+	lines = append(lines, "", buttons)
+
+	return card.Width(boxWidth).Render(strings.Join(lines, "\n"))
 }
 
-func (e configEditor) previewLines() []string {
+// previewLines renders the save summary as one short value per row. Each value is
+// hard-capped to the card's text width so a long value can never wrap and break
+// the layout.
+func (e configEditor) previewLines(contentWidth int) []string {
 	cfg := e.cfg
+	const labelW = 10
+	valW := max(8, contentWidth-labelW-1)
 	row := func(label, value string) string {
-		return theme.Focus.Render(fmt.Sprintf("%-11s ", label)) + value
+		if r := []rune(value); len(r) > valW && valW > 1 {
+			value = string(r[:valW-1]) + "…"
+		}
+		return theme.Focus.Render(fmt.Sprintf("%-*s ", labelW, label)) + value
 	}
-	entropy := "off — every link identical"
+	entropy := "off · every link identical"
 	if cfg.Entropy.Level != config.EntropyOff {
 		sp, br, vi := cfg.Entropy.EffectiveHuman()
-		entropy = fmt.Sprintf("%s — audience ±%d%%, breakout %d%%, %d%% viral",
+		entropy = fmt.Sprintf("%s · audience ±%d%% · breakout %d%% · %d%% viral",
 			strings.ToLower(entropyLevelLabel(cfg.Entropy.Level)), sp, br, vi)
 	}
 	return []string{
 		row("Traffic", fmt.Sprintf("%d–%d hits/min · %d worker(s)", cfg.Traffic.MinPerMin, cfg.Traffic.MaxPerMin, cfg.Traffic.Concurrent)),
-		row("Identity", fmt.Sprintf("bot %d%% · %s · desktop %d%% · unique IP %.0f%%",
-			cfg.Requests.UnknownRatio, botPoolLabel(cfg.Requests.Bots), cfg.Requests.DeviceRatio, cfg.Requests.UniqueIPProb*100)),
+		row("Method", cfg.Requests.Method),
+		row("Bots", fmt.Sprintf("%d%% · %s", cfg.Requests.UnknownRatio, botPoolLabel(cfg.Requests.Bots))),
+		row("Devices", fmt.Sprintf("%d%% desktop · %.0f%% unique IP", cfg.Requests.DeviceRatio, cfg.Requests.UniqueIPProb*100)),
 		row("Schedule", fmt.Sprintf("active %d–%dm · idle %.0f%% for %d–%dm",
 			cfg.Schedule.MinActive, cfg.Schedule.MaxActive, cfg.Schedule.IdleOdds*100, cfg.Schedule.MinIdle, cfg.Schedule.MaxIdle)),
 		row("Entropy", entropy),
 		row("Origin", modeLabel(cfg.Origin.Mode)),
-		row("URL params", fmt.Sprintf("%d rule(s) · %d payload(s)", len(cfg.Requests.URLParams), countPayloads(cfg.Requests.URLParams))),
+		row("Params", fmt.Sprintf("%d rule(s) · %d payload(s)", len(cfg.Requests.URLParams), countPayloads(cfg.Requests.URLParams))),
 	}
 }
 
