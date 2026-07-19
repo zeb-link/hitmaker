@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
@@ -191,8 +191,18 @@ func TestConfigEditorFitsStandardTerminal(t *testing.T) {
 	}
 }
 
-func keyMsg(value string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(value)}
+func keyMsg(value string) tea.KeyPressMsg {
+	switch value {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab}
+	default:
+		r := []rune(value)
+		return tea.KeyPressMsg{Code: r[0], Text: value}
+	}
 }
 
 func contains(value, needle string) bool {

@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 	"github.com/zeb-link/hitmaker/v2/internal/ui/theme"
@@ -71,7 +71,9 @@ type configEditor struct {
 
 func newConfigEditor(cfg config.Config) configEditor {
 	input := textinput.New()
-	input.Cursor.Style = lipgloss.NewStyle().Foreground(theme.HotPink)
+	st := textinput.DefaultDarkStyles()
+	st.Cursor.Color = theme.HotPink
+	input.SetStyles(st)
 	input.Prompt = theme.Focus.Render("⣿ ")
 	input.CharLimit = 512
 	return configEditor{
@@ -352,10 +354,11 @@ func (e *configEditor) handleInlineInput(msg tea.KeyMsg) bool {
 		}
 		return true
 	}
-	if len(msg.Runes) != 1 {
+	runes := []rune(msg.Key().Text)
+	if len(runes) != 1 {
 		return false
 	}
-	r := msg.Runes[0]
+	r := runes[0]
 	if (r < '0' || r > '9') && r != '.' {
 		return false
 	}
@@ -1556,9 +1559,12 @@ func clampFloat(value, minValue, maxValue float64) float64 {
 }
 
 func normalizedKey(msg tea.KeyMsg) string {
-	key := msg.String()
-	if len(msg.Runes) == 1 {
-		return strings.ToLower(string(msg.Runes[0]))
+	// v2: printable keys carry their characters in Key().Text; special keys
+	// (enter, esc, tab, …) report an empty Text and are named by String().
+	if text := msg.Key().Text; text != "" {
+		if r := []rune(text); len(r) == 1 {
+			return strings.ToLower(string(r[0]))
+		}
 	}
-	return strings.ToLower(key)
+	return strings.ToLower(msg.String())
 }

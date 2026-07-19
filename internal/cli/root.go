@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
@@ -110,7 +110,8 @@ func runTrafficTUI(args []string, noIntro bool) error {
 	if err != nil {
 		return err
 	}
-	_, err = tea.NewProgram(model, tea.WithAltScreen()).Run()
+	// Alt-screen is requested per-frame via View.AltScreen in v2.
+	_, err = tea.NewProgram(model).Run()
 	return err
 }
 
@@ -119,7 +120,7 @@ func runConfigEditor() error {
 	if err != nil {
 		return err
 	}
-	_, err = tea.NewProgram(tui.NewConfigModel(cfg), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.NewConfigModel(cfg)).Run()
 	return err
 }
 

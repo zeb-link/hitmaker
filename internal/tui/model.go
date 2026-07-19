@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 	"github.com/zeb-link/hitmaker/v2/internal/simulator"
@@ -92,7 +92,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.snapshot = m.runner.Snapshot()
 		cmds = append(cmds, tick())
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.mode == modeConfig {
 			next, action, cmd := m.configEdit.Update(msg)
 			m.configEdit = next
@@ -124,7 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		}
-		switch msg.String() {
+		switch keyString(msg) {
 		case "ctrl+c", "q":
 			m.runner.StopAndWait(2 * time.Second)
 			return m, tea.Quit
@@ -148,19 +148,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if m.width == 0 {
-		return ""
+		return tea.NewView("")
 	}
-	if m.mode == modeConfig {
+	var content string
+	switch {
+	case m.mode == modeConfig:
 		contentWidth := max(1, m.width-bodyInsetX*2)
 		_, rightWidth := dashboardPaneWidths(contentWidth)
-		return m.configEdit.WithHelpWidth(rightWidth).View(m.width, m.height, m.err)
+		content = m.configEdit.WithHelpWidth(rightWidth).View(m.width, m.height, m.err)
+	case time.Now().Before(m.introUntil):
+		content = m.introView()
+	default:
+		content = m.dashboardView()
 	}
-	if time.Now().Before(m.introUntil) {
-		return m.introView()
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
+}
+
+// keyString maps a v2 key press to the string the dashboard switches on:
+// printable keys use their literal text (so "K" and "k" stay distinct), and
+// named keys (up, enter, ctrl+c) fall back to the canonical String() form.
+func keyString(msg tea.KeyPressMsg) string {
+	if t := msg.Key().Text; t != "" {
+		return t
 	}
-	return m.dashboardView()
+	return msg.String()
 }
 
 // bannerGlyphs are 5-row-tall, 5-cell-wide block letters. Composing the wordmark

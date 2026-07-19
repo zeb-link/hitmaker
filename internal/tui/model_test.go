@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
+	"charm.land/bubbles/v2/spinner"
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
 
@@ -38,14 +38,38 @@ func TestIntroViewRendersAnimatedBanner(t *testing.T) {
 	}
 	m.spinner = spinner.New()
 	m.spinner.Spinner = spinner.Spinner{Frames: []string{"●"}}
-	view := m.introView()
-	if !strings.Contains(view, "█████") {
-		t.Fatalf("intro missing block banner:\n%s", view)
+	// lipgloss v2 emits color escapes even off a TTY, and the banner is rendered
+	// one glyph-cell at a time for the rainbow animation — so the block run is
+	// split by escape codes. Strip ANSI before asserting the visible shape.
+	plain := stripANSI(m.introView())
+	if !strings.Contains(plain, "█████") {
+		t.Fatalf("intro missing block banner:\n%s", plain)
 	}
-	if !strings.Contains(view, "synthetic traffic engine") {
-		t.Fatalf("intro missing subtitle:\n%s", view)
+	if !strings.Contains(plain, "synthetic traffic engine") {
+		t.Fatalf("intro missing subtitle:\n%s", plain)
 	}
-	if !strings.Contains(view, "warming up") {
-		t.Fatalf("intro missing loading text:\n%s", view)
+	if !strings.Contains(plain, "warming up") {
+		t.Fatalf("intro missing loading text:\n%s", plain)
 	}
+}
+
+// stripANSI removes SGR/escape sequences so tests can assert on visible glyphs.
+func stripANSI(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == 0x1b {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }

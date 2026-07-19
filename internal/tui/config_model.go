@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
@@ -36,7 +36,7 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		next, action, cmd := m.editor.Update(msg)
 		m.editor = next
 		switch action {
@@ -69,7 +69,7 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m ConfigModel) View() string {
+func (m ConfigModel) View() tea.View {
 	width := m.width
 	height := m.height
 	if width == 0 {
@@ -78,5 +78,7 @@ func (m ConfigModel) View() string {
 	if height == 0 {
 		height = 32
 	}
-	return m.editor.View(width, height, m.err)
+	v := tea.NewView(m.editor.View(width, height, m.err))
+	v.AltScreen = true
+	return v
 }

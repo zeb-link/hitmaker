@@ -1,9 +1,11 @@
 // Package theme defines Hitmaker's terminal visual vocabulary.
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
-const (
+// lipgloss v2 colors are color.Color values (not string constants), so these
+// are var, not const.
+var (
 	HotPink   = lipgloss.Color("205")
 	Laser     = lipgloss.Color("198")
 	Mint      = lipgloss.Color("121")

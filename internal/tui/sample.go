@@ -3,7 +3,7 @@ package tui
 import (
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
+	"charm.land/bubbles/v2/spinner"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 	"github.com/zeb-link/hitmaker/v2/internal/simulator"
