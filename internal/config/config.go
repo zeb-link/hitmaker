@@ -30,6 +30,7 @@ type Config struct {
 	Traffic  TrafficConfig  `json:"traffic"`
 	Requests RequestConfig  `json:"requests"`
 	Schedule ScheduleConfig `json:"schedule"`
+	Entropy  EntropyConfig  `json:"entropy"`
 	Origin   OriginConfig   `json:"origin"`
 }
 
@@ -60,6 +61,85 @@ type ScheduleConfig struct {
 	MaxIdle   int     `json:"maxIdle"`
 }
 
+// EntropyLevel names how much per-link personality the run injects. Each named
+// level is a preset bundle of the three underlying knobs; "custom" means the
+// knobs were hand-tuned and should be read as stored.
+type EntropyLevel string
+
+const (
+	EntropyOff    EntropyLevel = "off"
+	EntropyCalm   EntropyLevel = "calm"
+	EntropyChaos  EntropyLevel = "chaos"
+	EntropyMayhem EntropyLevel = "mayhem"
+	EntropyCustom EntropyLevel = "custom"
+)
+
+// EntropyConfig controls per-link variation ("entropy"). Off reproduces the
+// uniform behaviour where every link converges to the same profile. The named
+// levels dial up how differently individual links behave — their device mix,
+// their traffic volume, and whether a few become breakout "viral" links.
+type EntropyConfig struct {
+	Level EntropyLevel `json:"level"`
+	// DeviceSpread is how far a link's desktop share may wander from the base,
+	// in percentage points (0..100).
+	DeviceSpread int `json:"deviceSpread"`
+	// Breakout is a 0..100 human dial for how large the biggest links get. It
+	// maps to a log-normal energy sigma at runtime.
+	Breakout int `json:"breakout"`
+	// ViralPercent is the share of links (0..100) that become breakout links —
+	// hugging the top of the rate range and rarely going idle.
+	ViralPercent int `json:"viralPercent"`
+}
+
+// entropyPreset returns the human knob values for a named level. Off and custom
+// are handled by the caller; any unknown level falls back to chaos.
+func entropyPreset(level EntropyLevel) (deviceSpread, breakout, viralPercent int) {
+	switch level {
+	case EntropyOff:
+		return 0, 0, 0
+	case EntropyCalm:
+		return 12, 25, 2
+	case EntropyMayhem:
+		return 40, 85, 12
+	case EntropyChaos:
+		fallthrough
+	default:
+		return 25, 50, 5
+	}
+}
+
+// EntropyParams are the resolved runtime knobs the simulator consumes.
+type EntropyParams struct {
+	DeviceSpread int     // percentage points of per-link desktop-share wander
+	Sigma        float64 // log-normal sigma for the per-link energy multiplier
+	ViralOdds    float64 // 0..1 chance a link becomes a breakout link
+}
+
+// Active reports whether entropy will change anything. Off (or all-zero custom)
+// means every link keeps the base profile.
+func (p EntropyParams) Active() bool {
+	return p.DeviceSpread > 0 || p.Sigma > 0 || p.ViralOdds > 0
+}
+
+// EffectiveHuman returns the human knob values in force: the stored values for a
+// custom level, otherwise the named preset (off = all zero).
+func (e EntropyConfig) EffectiveHuman() (deviceSpread, breakout, viralPercent int) {
+	if e.Level == EntropyCustom {
+		return e.DeviceSpread, e.Breakout, e.ViralPercent
+	}
+	return entropyPreset(e.Level)
+}
+
+// Params resolves the config into the runtime knobs the simulator consumes.
+func (e EntropyConfig) Params() EntropyParams {
+	deviceSpread, breakout, viralPercent := e.EffectiveHuman()
+	return EntropyParams{
+		DeviceSpread: deviceSpread,
+		Sigma:        float64(breakout) / 100 * 1.2, // 100 → sigma 1.2 (a fat, natural tail)
+		ViralOdds:    float64(viralPercent) / 100,
+	}
+}
+
 type OriginConfig struct {
 	Mode           Mode              `json:"mode"`
 	Provider       string            `json:"provider,omitempty"`
@@ -83,6 +163,7 @@ type Partial struct {
 	Traffic  *PartialTraffic  `json:"traffic,omitempty"`
 	Requests *PartialRequest  `json:"requests,omitempty"`
 	Schedule *PartialSchedule `json:"schedule,omitempty"`
+	Entropy  *PartialEntropy  `json:"entropy,omitempty"`
 	Origin   *PartialOrigin   `json:"origin,omitempty"`
 }
 
@@ -108,6 +189,13 @@ type PartialSchedule struct {
 	IdleOdds  *float64 `json:"idleOdds,omitempty"`
 	MinIdle   *int     `json:"minIdle,omitempty"`
 	MaxIdle   *int     `json:"maxIdle,omitempty"`
+}
+
+type PartialEntropy struct {
+	Level        *EntropyLevel `json:"level,omitempty"`
+	DeviceSpread *int          `json:"deviceSpread,omitempty"`
+	Breakout     *int          `json:"breakout,omitempty"`
+	ViralPercent *int          `json:"viralPercent,omitempty"`
 }
 
 type PartialOrigin struct {
@@ -141,6 +229,16 @@ func Default() Config {
 			IdleOdds:  0.75,
 			MinIdle:   1,
 			MaxIdle:   15,
+		},
+		// Entropy is on by default at the "chaos" level: links get distinct
+		// personalities and a few break out, so analytics show natural texture
+		// instead of every link converging to the same profile. Set level to
+		// "off" for perfectly uniform behaviour.
+		Entropy: EntropyConfig{
+			Level:        EntropyChaos,
+			DeviceSpread: 25,
+			Breakout:     50,
+			ViralPercent: 5,
 		},
 		Origin: OriginConfig{
 			Mode: ModeNone,
@@ -246,6 +344,20 @@ func (c Config) Validate() error {
 	}
 	if c.Schedule.MinIdle < 0 || c.Schedule.MaxIdle < 0 || c.Schedule.MaxIdle < c.Schedule.MinIdle {
 		return errors.New("idle phase minutes are invalid")
+	}
+	switch c.Entropy.Level {
+	case EntropyOff, EntropyCalm, EntropyChaos, EntropyMayhem, EntropyCustom:
+	default:
+		return fmt.Errorf("unknown entropy level %q", c.Entropy.Level)
+	}
+	if c.Entropy.DeviceSpread < 0 || c.Entropy.DeviceSpread > 100 {
+		return errors.New("entropy deviceSpread must be 0..100")
+	}
+	if c.Entropy.Breakout < 0 || c.Entropy.Breakout > 100 {
+		return errors.New("entropy breakout must be 0..100")
+	}
+	if c.Entropy.ViralPercent < 0 || c.Entropy.ViralPercent > 100 {
+		return errors.New("entropy viralPercent must be 0..100")
 	}
 	switch c.Origin.Mode {
 	case ModeNone, ModeAuto, ModeVercel, ModeProxy:
@@ -389,6 +501,20 @@ func merge(cfg *Config, partial Partial) {
 			cfg.Schedule.MaxIdle = *partial.Schedule.MaxIdle
 		}
 	}
+	if partial.Entropy != nil {
+		if partial.Entropy.Level != nil {
+			cfg.Entropy.Level = *partial.Entropy.Level
+		}
+		if partial.Entropy.DeviceSpread != nil {
+			cfg.Entropy.DeviceSpread = *partial.Entropy.DeviceSpread
+		}
+		if partial.Entropy.Breakout != nil {
+			cfg.Entropy.Breakout = *partial.Entropy.Breakout
+		}
+		if partial.Entropy.ViralPercent != nil {
+			cfg.Entropy.ViralPercent = *partial.Entropy.ViralPercent
+		}
+	}
 	if partial.Origin != nil {
 		if partial.Origin.Mode != nil {
 			cfg.Origin.Mode = *partial.Origin.Mode
@@ -461,6 +587,23 @@ func mergePartial(dst *Partial, src Partial) {
 		}
 		if src.Schedule.MaxIdle != nil {
 			dst.Schedule.MaxIdle = src.Schedule.MaxIdle
+		}
+	}
+	if src.Entropy != nil {
+		if dst.Entropy == nil {
+			dst.Entropy = &PartialEntropy{}
+		}
+		if src.Entropy.Level != nil {
+			dst.Entropy.Level = src.Entropy.Level
+		}
+		if src.Entropy.DeviceSpread != nil {
+			dst.Entropy.DeviceSpread = src.Entropy.DeviceSpread
+		}
+		if src.Entropy.Breakout != nil {
+			dst.Entropy.Breakout = src.Entropy.Breakout
+		}
+		if src.Entropy.ViralPercent != nil {
+			dst.Entropy.ViralPercent = src.Entropy.ViralPercent
 		}
 	}
 	if src.Origin != nil {
@@ -553,9 +696,10 @@ func envPartial() (Partial, error) {
 	t := &PartialTraffic{}
 	r := &PartialRequest{}
 	s := &PartialSchedule{}
+	en := &PartialEntropy{}
 	o := &PartialOrigin{}
 
-	var usedT, usedR, usedS, usedO bool
+	var usedT, usedR, usedS, usedEn, usedO bool
 	if value, ok, err := envInt("MIN_PER_MIN"); err != nil {
 		return p, err
 	} else if ok {
@@ -645,6 +789,29 @@ func envPartial() (Partial, error) {
 		s.MaxIdle = &value
 		usedS = true
 	}
+	if value, ok := os.LookupEnv("ENTROPY_LEVEL"); ok {
+		level := EntropyLevel(strings.ToLower(strings.TrimSpace(value)))
+		en.Level = &level
+		usedEn = true
+	}
+	if value, ok, err := envInt("ENTROPY_DEVICE_SPREAD"); err != nil {
+		return p, err
+	} else if ok {
+		en.DeviceSpread = &value
+		usedEn = true
+	}
+	if value, ok, err := envInt("ENTROPY_BREAKOUT"); err != nil {
+		return p, err
+	} else if ok {
+		en.Breakout = &value
+		usedEn = true
+	}
+	if value, ok, err := envInt("ENTROPY_VIRAL_PERCENT"); err != nil {
+		return p, err
+	} else if ok {
+		en.ViralPercent = &value
+		usedEn = true
+	}
 	if value, ok := os.LookupEnv("HITMAKER_MODE"); ok {
 		mode := Mode(value)
 		o.Mode = &mode
@@ -684,6 +851,9 @@ func envPartial() (Partial, error) {
 	}
 	if usedS {
 		p.Schedule = s
+	}
+	if usedEn {
+		p.Entropy = en
 	}
 	if usedO {
 		p.Origin = o

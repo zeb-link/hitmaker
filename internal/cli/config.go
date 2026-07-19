@@ -110,6 +110,29 @@ func setKey(cfg *config.Config, key, raw string) error {
 		value, err := strconv.ParseFloat(raw, 64)
 		cfg.Schedule.IdleOdds = value
 		return err
+	case "entropy.level", "entropy":
+		cfg.Entropy.Level = config.EntropyLevel(strings.ToLower(strings.TrimSpace(raw)))
+	case "entropy.devicespread", "devicespread", "device_spread":
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return err
+		}
+		cfg.Entropy.DeviceSpread = value
+		cfg.Entropy.Level = config.EntropyCustom
+	case "entropy.breakout", "breakout":
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return err
+		}
+		cfg.Entropy.Breakout = value
+		cfg.Entropy.Level = config.EntropyCustom
+	case "entropy.viralpercent", "viralpercent", "viral_percent":
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return err
+		}
+		cfg.Entropy.ViralPercent = value
+		cfg.Entropy.Level = config.EntropyCustom
 	case "origin.mode", "mode":
 		cfg.Origin.Mode = config.Mode(raw)
 	case "origin.provider", "provider":

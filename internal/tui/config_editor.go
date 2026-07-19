@@ -91,6 +91,10 @@ func newConfigEditor(cfg config.Config) configEditor {
 			{group: "SCHEDULE", label: "Idle odds", kind: "slider", key: "idleOdds", min: 0, max: 1, step: 0.05},
 			{group: "SCHEDULE", label: "Idle min", kind: "number", key: "minIdle", min: 0, max: 120, step: 1},
 			{group: "SCHEDULE", label: "Idle max", kind: "number", key: "maxIdle", min: 0, max: 120, step: 1},
+			{group: "ENTROPY", label: "Level", kind: "select", key: "entropy"},
+			{group: "ENTROPY", label: "Audience spread", kind: "slider", key: "entDevice", min: 0, max: 100, step: 5},
+			{group: "ENTROPY", label: "Breakout intensity", kind: "slider", key: "entBreakout", min: 0, max: 100, step: 5},
+			{group: "ENTROPY", label: "Viral links %", kind: "slider", key: "entViral", min: 0, max: 20, step: 1},
 			{group: "ORIGIN", label: "Origin mode", kind: "select", key: "mode"},
 			{group: "ORIGIN", label: "Proxy service", kind: "text", key: "provider"},
 			{group: "ORIGIN", label: "IPRoyal endpoint", kind: "secret", key: "iproyal"},
@@ -381,6 +385,8 @@ func (e configEditor) currentSelectValue(key string) string {
 		return e.cfg.Requests.Method
 	case "mode":
 		return string(e.cfg.Origin.Mode)
+	case "entropy":
+		return string(e.cfg.Entropy.Level)
 	case "botpool":
 		idx := botPoolIndex(e.cfg.Requests.Bots)
 		if idx < 0 {
@@ -411,6 +417,17 @@ func (e configEditor) selectOptions(key string) []selectOption {
 			{label: "Vercel", value: string(config.ModeVercel)},
 			{label: "Proxy", value: string(config.ModeProxy)},
 		}
+	case "entropy":
+		options := []selectOption{
+			{label: "Off", value: string(config.EntropyOff)},
+			{label: "Calm", value: string(config.EntropyCalm)},
+			{label: "Chaos", value: string(config.EntropyChaos)},
+			{label: "Mayhem", value: string(config.EntropyMayhem)},
+		}
+		if e.cfg.Entropy.Level == config.EntropyCustom {
+			options = append(options, selectOption{label: "Custom", value: string(config.EntropyCustom)})
+		}
+		return options
 	case "botpool":
 		options := make([]selectOption, 0, len(botPoolPresets)+1)
 		for i, preset := range botPoolPresets {
@@ -463,6 +480,18 @@ func (e *configEditor) adjust(dir int) {
 		e.cfg.Schedule.MinIdle = clampInt(e.cfg.Schedule.MinIdle+dir, 0, 120)
 	case "maxIdle":
 		e.cfg.Schedule.MaxIdle = clampInt(e.cfg.Schedule.MaxIdle+dir, 0, 120)
+	case "entropy":
+		e.cfg.Entropy.Level = config.EntropyLevel(rotate(string(e.cfg.Entropy.Level),
+			[]string{"off", "calm", "chaos", "mayhem"}, dir))
+	case "entDevice":
+		e.beginCustomEntropy()
+		e.cfg.Entropy.DeviceSpread = clampInt(e.cfg.Entropy.DeviceSpread+dir*int(field.step), 0, 100)
+	case "entBreakout":
+		e.beginCustomEntropy()
+		e.cfg.Entropy.Breakout = clampInt(e.cfg.Entropy.Breakout+dir*int(field.step), 0, 100)
+	case "entViral":
+		e.beginCustomEntropy()
+		e.cfg.Entropy.ViralPercent = clampInt(e.cfg.Entropy.ViralPercent+dir*int(field.step), 0, 100)
 	case "mode":
 		e.cfg.Origin.Mode = config.Mode(rotate(string(e.cfg.Origin.Mode), []string{"none", "auto", "vercel", "proxy"}, dir))
 		if (e.cfg.Origin.Mode == config.ModeAuto || e.cfg.Origin.Mode == config.ModeProxy) && e.cfg.Origin.Provider == "" {
@@ -484,6 +513,20 @@ func (e *configEditor) adjust(dir int) {
 		}
 	}
 	_ = e.cfg.Validate()
+}
+
+// beginCustomEntropy snapshots the level's current effective knobs into the
+// stored fields and switches to the custom level, so that hand-tuning one knob
+// leaves the others where the preset had them.
+func (e *configEditor) beginCustomEntropy() {
+	if e.cfg.Entropy.Level == config.EntropyCustom {
+		return
+	}
+	spread, breakout, viral := e.cfg.Entropy.EffectiveHuman()
+	e.cfg.Entropy.DeviceSpread = spread
+	e.cfg.Entropy.Breakout = breakout
+	e.cfg.Entropy.ViralPercent = viral
+	e.cfg.Entropy.Level = config.EntropyCustom
 }
 
 func (e *configEditor) setRaw(key, value string) {
@@ -514,6 +557,15 @@ func (e *configEditor) setRaw(key, value string) {
 		e.cfg.Schedule.MinIdle = atoi(value, e.cfg.Schedule.MinIdle)
 	case "maxIdle":
 		e.cfg.Schedule.MaxIdle = atoi(value, e.cfg.Schedule.MaxIdle)
+	case "entDevice":
+		e.beginCustomEntropy()
+		e.cfg.Entropy.DeviceSpread = clampInt(atoi(value, e.cfg.Entropy.DeviceSpread), 0, 100)
+	case "entBreakout":
+		e.beginCustomEntropy()
+		e.cfg.Entropy.Breakout = clampInt(atoi(value, e.cfg.Entropy.Breakout), 0, 100)
+	case "entViral":
+		e.beginCustomEntropy()
+		e.cfg.Entropy.ViralPercent = clampInt(atoi(value, e.cfg.Entropy.ViralPercent), 0, 100)
 	case "mode":
 		e.cfg.Origin.Mode = config.Mode(value)
 	case "provider":
@@ -793,11 +845,20 @@ func (e configEditor) fieldInstructions(field editorField) string {
 			return "Of the non-bot (human) hits, the percent that are desktop vs mobile."
 		case "unique":
 			return "Odds each hit uses a fresh IP. Lower means more returning-visitor repeats."
+		case "entDevice":
+			return "How far each link's desktop share drifts from the base. Switches level to Custom."
+		case "entBreakout":
+			return "How big the busiest links get. Higher makes a few links dominate. Switches to Custom."
+		case "entViral":
+			return "Share of links that become breakouts — near-max traffic, rarely idle. Switches to Custom."
 		}
 		return "Type numbers to replace the value immediately. Backspace edits. Left/right nudges."
 	case "select":
 		if field.key == "mode" {
 			return "Left/right changes the option. Enter moves to the next row."
+		}
+		if field.key == "entropy" {
+			return "Left/right dials entropy. Off = every link identical; Mayhem = wild variation."
 		}
 		if field.key == "botpool" {
 			return "Left/right picks which bots the Bot traffic % draws from. Enter moves to the next row."
@@ -860,6 +921,20 @@ func (e configEditor) fieldGuide(field editorField) fieldGuide {
 		return fieldGuide{summary: "Shortest idle phase length in minutes.", details: []string{"Used only when the worker decides to idle.", "Idle min can be 0 for quick pauses."}}
 	case "maxIdle":
 		return fieldGuide{summary: "Longest idle phase length in minutes.", details: []string{"Large values create long quiet periods.", "Keep this near min idle for tighter traffic rhythm."}}
+	case "entropy":
+		return fieldGuide{summary: "How much personality each link gets. Without it, every link converges to the same profile and analytics look flat.", details: []string{
+			"Off: every link uses the same device mix, rate, and idle rhythm.",
+			"Calm: gentle per-link variation.",
+			"Chaos (default): clear differences and the occasional breakout link.",
+			"Mayhem: wild variation — a few links dominate hard.",
+			"Editing a knob below switches the level to Custom.",
+		}}
+	case "entDevice":
+		return fieldGuide{summary: "How far each link's desktop/mobile mix drifts from the base share.", details: []string{"0 keeps every link at the base device ratio.", "Higher makes some links desktop-heavy and others mobile-heavy."}}
+	case "entBreakout":
+		return fieldGuide{summary: "How large the busiest links get, on a long-tailed curve.", details: []string{"Most links stay near the base rate; a few climb well above it.", "Higher widens the gap between quiet and busy links."}}
+	case "entViral":
+		return fieldGuide{summary: "Share of links that become breakout 'viral' links.", details: []string{"Viral links hug the top of the rate range and rarely go idle.", "Set to 0 for no forced breakouts (the tail can still produce busy links)."}}
 	case "mode":
 		return fieldGuide{summary: "Controls where requests appear to come from. Identity, bot selection, method, and URL params still rotate in every mode.", details: []string{
 			"None: direct requests with no geo/IP spoofing headers.",
@@ -946,12 +1021,41 @@ func (e configEditor) previewLines() []string {
 		theme.Focus.Render("SCHEDULE"),
 		fmt.Sprintf("  Active %d-%d min, idle %.0f%% for %d-%d min", cfg.Schedule.MinActive, cfg.Schedule.MaxActive, cfg.Schedule.IdleOdds*100, cfg.Schedule.MinIdle, cfg.Schedule.MaxIdle),
 		"",
+		theme.Focus.Render("ENTROPY"),
+		entropyPreviewLine(cfg.Entropy),
+		"",
 		theme.Focus.Render("ORIGIN"),
 		modeLabel(cfg.Origin.Mode),
 		"",
 		theme.Focus.Render("URL PARAMS"),
 		fmt.Sprintf("%d parameter rules, %d payload variants", len(cfg.Requests.URLParams), countPayloads(cfg.Requests.URLParams)),
 	}
+}
+
+func entropyLevelLabel(level config.EntropyLevel) string {
+	switch level {
+	case config.EntropyOff:
+		return "Off"
+	case config.EntropyCalm:
+		return "Calm"
+	case config.EntropyChaos:
+		return "Chaos"
+	case config.EntropyMayhem:
+		return "Mayhem"
+	case config.EntropyCustom:
+		return "Custom"
+	default:
+		return string(level)
+	}
+}
+
+func entropyPreviewLine(e config.EntropyConfig) string {
+	label := entropyLevelLabel(e.Level)
+	if e.Level == config.EntropyOff {
+		return fmt.Sprintf("  %s — every link identical", label)
+	}
+	spread, breakout, viral := e.EffectiveHuman()
+	return fmt.Sprintf("  %s — audience ±%d%%, breakout %d%%, %d%% viral links", label, spread, breakout, viral)
 }
 
 func (e configEditor) paramsView(width int) string {
@@ -1104,6 +1208,17 @@ func (e configEditor) rawValue(key string) string {
 		return strconv.Itoa(e.cfg.Schedule.MinIdle)
 	case "maxIdle":
 		return strconv.Itoa(e.cfg.Schedule.MaxIdle)
+	case "entropy":
+		return string(e.cfg.Entropy.Level)
+	case "entDevice":
+		spread, _, _ := e.cfg.Entropy.EffectiveHuman()
+		return strconv.Itoa(spread)
+	case "entBreakout":
+		_, breakout, _ := e.cfg.Entropy.EffectiveHuman()
+		return strconv.Itoa(breakout)
+	case "entViral":
+		_, _, viral := e.cfg.Entropy.EffectiveHuman()
+		return strconv.Itoa(viral)
 	case "mode":
 		return string(e.cfg.Origin.Mode)
 	case "botpool":
@@ -1294,6 +1409,14 @@ func keyLabel(key string) string {
 		return "unique IP odds"
 	case "idleOdds":
 		return "idle odds"
+	case "entropy":
+		return "entropy level"
+	case "entDevice":
+		return "audience spread"
+	case "entBreakout":
+		return "breakout intensity"
+	case "entViral":
+		return "viral links"
 	default:
 		return key
 	}

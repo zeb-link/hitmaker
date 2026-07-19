@@ -41,6 +41,7 @@ type Runner struct {
 	idgen      *identity.Generator
 	maxWorkers int
 	baseSeed   int64
+	personas   map[string]persona
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -84,6 +85,12 @@ func New(ctx context.Context, opts Options) (*Runner, error) {
 			return http.ErrUseLastResponse
 		}
 	}
+	// Personas are drawn from a stable base seed so a fixed run seed reproduces
+	// them exactly; a zero seed varies them per run off the clock.
+	personaBaseSeed := opts.Seed
+	if personaBaseSeed == 0 {
+		personaBaseSeed = time.Now().UnixNano()
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	r := &Runner{
 		cfg:        opts.Config,
@@ -94,6 +101,7 @@ func New(ctx context.Context, opts Options) (*Runner, error) {
 		idgen:      idgen,
 		maxWorkers: maxWorkers,
 		baseSeed:   opts.Seed,
+		personas:   buildPersonas(opts.Config, targets, personaBaseSeed),
 		ctx:        runCtx,
 		cancel:     cancel,
 		paused:     map[string]bool{},
@@ -217,6 +225,8 @@ func (r *Runner) isPaused(target string) bool {
 func (r *Runner) worker(target string, workerID int, seed int64) {
 	defer r.wg.Done()
 	rng := rand.New(rand.NewSource(seed))
+	p := r.personas[target]
+	first := true
 	for {
 		if err := r.ctx.Err(); err != nil {
 			r.collector.SetWorker(WorkerState{Target: target, WorkerID: workerID, Phase: PhaseStopped})
@@ -233,16 +243,25 @@ func (r *Runner) worker(target string, workerID int, seed int64) {
 		if activeMinutes == 0 {
 			activeMinutes = 1
 		}
-		r.activePhase(target, workerID, rng, activeMinutes)
-		if rng.Float64() < r.cfg.Schedule.IdleOdds {
+		// Desync the herd: cut the very first burst short by a random amount so
+		// links reach their idle roll at staggered times rather than all at once.
+		// Traffic still starts immediately.
+		if first && p.desync && activeMinutes > 1 {
+			activeMinutes = 1 + rng.Intn(activeMinutes)
+		}
+		first = false
+		r.activePhase(target, workerID, rng, activeMinutes, p)
+		if rng.Float64() < p.idleOdds {
 			idleMinutes := randRange(rng, r.cfg.Schedule.MinIdle, r.cfg.Schedule.MaxIdle)
 			r.idlePhase(target, workerID, idleMinutes)
 		}
 	}
 }
 
-func (r *Runner) activePhase(target string, workerID int, rng *rand.Rand, minutes int) {
-	rate := randRange(rng, r.cfg.Traffic.MinPerMin, r.cfg.Traffic.MaxPerMin)
+func (r *Runner) activePhase(target string, workerID int, rng *rand.Rand, minutes int, p persona) {
+	// A link's energy scales its chosen rate: busy (and viral) links push toward
+	// and past the top of the range; quiet links stay light.
+	rate := scaleRate(randRange(rng, r.cfg.Traffic.MinPerMin, r.cfg.Traffic.MaxPerMin), p.energy)
 	if rate <= 0 {
 		rate = 1
 	}
@@ -277,7 +296,13 @@ func (r *Runner) idlePhase(target string, workerID int, minutes int) {
 }
 
 func (r *Runner) doHit(target string, workerID int, rng *rand.Rand) {
-	ident := r.idgen.Next(r.cfg.Requests.DeviceRatio, r.cfg.Requests.UnknownRatio, r.cfg.Requests.UniqueIPProb)
+	// Each link carries its own desktop/mobile skew, so the device breakdown
+	// varies across links instead of every link matching the global ratio.
+	deviceRatio := r.cfg.Requests.DeviceRatio
+	if p, ok := r.personas[target]; ok {
+		deviceRatio = p.deviceRatio
+	}
+	ident := r.idgen.Next(deviceRatio, r.cfg.Requests.UnknownRatio, r.cfg.Requests.UniqueIPProb)
 	applied, err := urlparams.Apply(target, r.cfg.Requests.URLParams, rng)
 	if err != nil {
 		r.collector.Add(HitResult{Target: target, WorkerID: workerID, Err: err.Error(), At: time.Now(), Phase: PhaseActive})

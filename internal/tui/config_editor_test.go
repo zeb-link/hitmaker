@@ -49,8 +49,10 @@ func TestConfigEditorUppercaseNestedParamKeys(t *testing.T) {
 
 func TestConfigEditorViewShowsCommandBarAndSections(t *testing.T) {
 	editor := newConfigEditor(config.Default())
-	view := editor.View(120, 42, nil)
-	for _, want := range []string{"TRAFFIC", "IDENTITY", "ORIGIN", "SHORTCUTS", "URL PARAMS", "Type numbers"} {
+	// Tall enough that the whole control deck fits without scrolling — the deck
+	// grew an ENTROPY group, so URL PARAMS (the last row) needs the extra height.
+	view := editor.View(120, 60, nil)
+	for _, want := range []string{"TRAFFIC", "IDENTITY", "SCHEDULE", "ENTROPY", "ORIGIN", "SHORTCUTS", "URL PARAMS", "Type numbers"} {
 		if !contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
