@@ -447,7 +447,7 @@ func dashboardPaneWidths(width int) (int, int) {
 }
 
 func (m Model) headerView(snap simulator.Snapshot) string {
-	status := theme.PillHot.Render(m.spinner.View() + " LIVE")
+	status := theme.Live.Render(m.spinner.View() + " LIVE")
 	if snap.WorkerCapHit {
 		status += " " + theme.Warn.Render("cap")
 	}
@@ -456,10 +456,10 @@ func (m Model) headerView(snap simulator.Snapshot) string {
 	var line string
 	if m.width < 76 {
 		// Compact header: drop workers/uptime so the row never wraps.
-		line = fmt.Sprintf(" %s %s  hits %s  err %s",
+		line = fmt.Sprintf(" %s %s  Hits %s  Err %s",
 			theme.Logo.Render("HITMAKER"), status, hits, errs)
 	} else {
-		line = fmt.Sprintf(" %s  %s  hits %s  errors %s  workers %d  uptime %s",
+		line = fmt.Sprintf(" %s  %s  Hits %s  Errors %s  Workers %d  Uptime %s",
 			theme.Logo.Render("HITMAKER"), status, hits, errs,
 			snap.WorkerCount, snap.Uptime.Truncate(time.Second))
 	}

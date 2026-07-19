@@ -49,6 +49,10 @@ var (
 	Pill    = lipgloss.NewStyle().Foreground(Muted).Background(Panel).Padding(0, 1)
 	PillHot = lipgloss.NewStyle().Foreground(Accent).Background(AccentDim).Bold(true).Padding(0, 1)
 
+	// Live is the dashboard's running indicator — bright emerald on a dark
+	// emerald ground.
+	Live = lipgloss.NewStyle().Foreground(lipgloss.Color("#5fd39b")).Background(lipgloss.Color("#123528")).Bold(true).Padding(0, 1)
+
 	// Tick is the left accent marker used to indicate the focused row. It is a
 	// single amber cell — quiet, and (unlike a width-padded background) it can
 	// never wrap the row.
