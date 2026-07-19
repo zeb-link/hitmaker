@@ -623,9 +623,11 @@ func (e configEditor) frameView(width, height int, err error) string {
 	// same frame shape as the live dashboard, so switching between them doesn't
 	// jump the content around. Everything is sized from the real terminal height
 	// so it adapts to any size.
-	commands := e.commandBar(width)
+	commands := e.commandBar(width - bodyInsetX*2)
 	footer := theme.Subtle.Render(status)
-	bottom := lipgloss.JoinVertical(lipgloss.Left, commands, footer)
+	// Match the deck's left inset and leave a blank line of bottom margin so the
+	// hint bar isn't jammed against the window edges.
+	bottom := insetBlock(lipgloss.JoinVertical(lipgloss.Left, commands, footer, ""), bodyInsetX, 0)
 
 	fillTo := height - lipgloss.Height(bottom)
 	if fillTo < 6 {

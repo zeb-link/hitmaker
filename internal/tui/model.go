@@ -477,7 +477,7 @@ func (m Model) footerView() string {
 		theme.Pill.Render("C config"),
 		theme.Pill.Render("Q quit"),
 	}
-	return lipgloss.NewStyle().Width(m.width).PaddingTop(1).Render(strings.Join(parts, " "))
+	return lipgloss.NewStyle().Width(m.width).Padding(1, bodyInsetX, 1, bodyInsetX).Render(strings.Join(parts, " "))
 }
 
 func tick() tea.Cmd {
