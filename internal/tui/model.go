@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -29,6 +30,16 @@ const (
 )
 
 type tickMsg time.Time
+type introTickMsg time.Time
+
+// introVariantCount is the number of intro animations; New picks one at random
+// each launch.
+const introVariantCount = 4
+
+// introTick drives the intro animation at ~22fps, only while the intro is on.
+func introTick() tea.Cmd {
+	return tea.Tick(45*time.Millisecond, func(t time.Time) tea.Msg { return introTickMsg(t) })
+}
 
 const (
 	bodyInsetX = 2
@@ -40,17 +51,18 @@ type Model struct {
 	targets []string
 	runner  *simulator.Runner
 
-	mode       mode
-	width      int
-	height     int
-	selected   int
-	scroll     int
-	snapshot   simulator.Snapshot
-	spinner    spinner.Model
-	configEdit configEditor
-	introStart time.Time
-	introUntil time.Time
-	err        error
+	mode         mode
+	width        int
+	height       int
+	selected     int
+	scroll       int
+	snapshot     simulator.Snapshot
+	spinner      spinner.Model
+	configEdit   configEditor
+	introStart   time.Time
+	introUntil   time.Time
+	introVariant int
+	err          error
 }
 
 func New(opts Options) (Model, error) {
@@ -69,14 +81,15 @@ func New(opts Options) (Model, error) {
 	}
 	if !opts.NoIntro {
 		m.introStart = time.Now()
-		m.introUntil = m.introStart.Add(900 * time.Millisecond)
+		m.introUntil = m.introStart.Add(1400 * time.Millisecond)
+		m.introVariant = rand.IntN(introVariantCount)
 	}
 	return m, nil
 }
 
 func (m Model) Init() tea.Cmd {
 	m.runner.Start()
-	return tea.Batch(m.spinner.Tick, tick())
+	return tea.Batch(m.spinner.Tick, tick(), introTick())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -89,6 +102,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		cmds = append(cmds, cmd)
+	case introTickMsg:
+		// Keep the animation frames coming until the intro is over.
+		if !m.introStart.IsZero() && time.Now().Before(m.introUntil) {
+			cmds = append(cmds, introTick())
+		}
 	case tickMsg:
 		m.snapshot = m.runner.Snapshot()
 		cmds = append(cmds, tick())
@@ -223,38 +241,143 @@ func (m Model) introView() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
 }
 
-// animatedBanner paints the block wordmark in amber with a gold shimmer sweeping
-// left to right, led by an emerald crest — cohesive with the Ember palette
-// (amber + gold + a single complementary green) rather than a rainbow.
+var (
+	introAmber   = lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
+	introGold    = lipgloss.NewStyle().Foreground(theme.Gold).Bold(true)
+	introEmerald = lipgloss.NewStyle().Foreground(theme.Emerald).Bold(true)
+	introFaint   = lipgloss.NewStyle().Foreground(theme.Dim)
+	introMuted   = lipgloss.NewStyle().Foreground(theme.Muted)
+)
+
+// animatedBanner dispatches to one of the intro animations, chosen at random per
+// launch. Each renders the current frame of the HITMAKER block wordmark from the
+// elapsed time.
 func (m Model) animatedBanner() string {
 	elapsed := time.Since(m.introStart)
 	if m.introStart.IsZero() {
 		elapsed = 0
 	}
-	// The wave sweeps across the wordmark once over the intro, with a short
-	// lead-in from off the left edge.
-	wave := int(elapsed/(20*time.Millisecond)) - 4
-	base := lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
-	glow := lipgloss.NewStyle().Foreground(theme.Gold).Bold(true)
-	crest := lipgloss.NewStyle().Foreground(theme.Emerald).Bold(true)
+	ms := elapsed.Milliseconds()
+	frame := int(elapsed / (45 * time.Millisecond))
+	switch m.introVariant {
+	case 1:
+		return bannerRain(ms)
+	case 2:
+		return bannerScanline(ms)
+	case 3:
+		return bannerGlitch(ms, frame)
+	default:
+		return bannerDecode(ms, frame)
+	}
+}
+
+// bannerDecode scrambles each cell through tech glyphs, then resolves to the
+// solid block left to right with a gold flash — a "decrypt" reveal.
+func bannerDecode(ms int64, frame int) string {
+	scramble := []rune("▚▞▓▒░╱╲╳┃━╋┿╪01")
 	rows := make([]string, len(hitmakerBanner))
 	for row, line := range hitmakerBanner {
 		var b strings.Builder
-		for col, r := range line {
+		col := 0
+		for _, r := range line {
+			if r == ' ' {
+				b.WriteByte(' ')
+				col++
+				continue
+			}
+			resolveAt := int64(60 + col*11)
+			switch {
+			case ms >= resolveAt+70:
+				b.WriteString(introAmber.Render("█"))
+			case ms >= resolveAt:
+				b.WriteString(introGold.Render("█"))
+			default:
+				ch := scramble[(col*7+row*13+frame*5)%len(scramble)]
+				style := introFaint
+				if (col+frame)%3 == 0 {
+					style = introMuted
+				}
+				b.WriteString(style.Render(string(ch)))
+			}
+			col++
+		}
+		rows[row] = b.String()
+	}
+	return strings.Join(rows, "\n")
+}
+
+// bannerRain fills each column from the top with an emerald falling head leaving
+// an amber trail — hits landing and stacking up.
+func bannerRain(ms int64) string {
+	rows := make([]string, len(hitmakerBanner))
+	for row, line := range hitmakerBanner {
+		var b strings.Builder
+		col := 0
+		for _, r := range line {
+			if r == ' ' {
+				b.WriteByte(' ')
+				col++
+				continue
+			}
+			filled := int((ms - int64(col*7)) / 55)
+			switch {
+			case filled > row:
+				b.WriteString(introAmber.Render("█"))
+			case filled == row:
+				b.WriteString(introEmerald.Render("▀"))
+			default:
+				b.WriteByte(' ')
+			}
+			col++
+		}
+		rows[row] = b.String()
+	}
+	return strings.Join(rows, "\n")
+}
+
+// bannerScanline sweeps a bright line down the wordmark with a phosphor glow —
+// a CRT power-on.
+func bannerScanline(ms int64) string {
+	scan := int(ms / 75)
+	settled := ms > int64((len(hitmakerBanner)+1)*75)
+	rows := make([]string, len(hitmakerBanner))
+	for row, line := range hitmakerBanner {
+		var b strings.Builder
+		for _, r := range line {
 			if r == ' ' {
 				b.WriteByte(' ')
 				continue
 			}
-			switch d := col - wave; {
-			case d == 0:
-				b.WriteString(crest.Render(string(r)))
-			case d >= -2 && d <= 1:
-				b.WriteString(glow.Render(string(r)))
+			switch {
+			case settled, row < scan-1:
+				b.WriteString(introAmber.Render("█"))
+			case row <= scan:
+				b.WriteString(introGold.Render("█"))
 			default:
-				b.WriteString(base.Render(string(r)))
+				b.WriteString(introFaint.Render("░"))
 			}
 		}
 		rows[row] = b.String()
+	}
+	return strings.Join(rows, "\n")
+}
+
+// bannerGlitch jitters the rows with channel-split color offsets, then snaps into
+// aligned amber.
+func bannerGlitch(ms int64, frame int) string {
+	if ms > 420 {
+		rows := make([]string, len(hitmakerBanner))
+		for row, line := range hitmakerBanner {
+			rows[row] = introAmber.Render(line)
+		}
+		return strings.Join(rows, "\n")
+	}
+	styles := []lipgloss.Style{introAmber, introGold, introEmerald}
+	rows := make([]string, len(hitmakerBanner))
+	for row, line := range hitmakerBanner {
+		off := (row*3 + frame*7) % 4
+		style := styles[(row+frame)%len(styles)]
+		rows[row] = strings.Repeat(" ", off) + style.Render(line)
 	}
 	return strings.Join(rows, "\n")
 }
