@@ -357,8 +357,7 @@ make release-check  # test, cross-compile, assemble and dry-run the npm packages
 ```
 
 Releases are automatic: push a `v*` tag and CI publishes to npm. See
-`RELEASE.md` for the details, and `AGENTS.md` for the source-of-truth
-conventions for working in this repo.
+`RELEASE.md` for the details.
 
 ## Feedback
 

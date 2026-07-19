@@ -2,58 +2,26 @@
 
 ## 2.3.0 - 2026-07-19
 
-### Changed
+Moved the TUI to Charm v2 (bubbletea/bubbles/lipgloss v2) and reworked the look.
 
-- **Upgraded the whole Bubble Tea stack to Charm v2** — `bubbletea`, `bubbles`,
-  and `lipgloss` now come from the `charm.land/*/v2` module line (v2.0.8 /
-  v2.1.1 / v2.0.5). The migration adapts to v2's API: `View()` returns a
-  `tea.View` with a per-frame `AltScreen`, key handling dispatches on
-  `KeyPressMsg` (`Key().Text`, not `.Runes`), and theme colours are `var` not
-  `const`.
-- **New "Ember" visual identity** — a warm near-black ground with a single amber
-  accent, and soft **emerald (hits) / tomato (errors)** semantics. Focus is a
-  quiet amber left tick instead of a full-width bar; sliders are thin rails with
-  a knob; radio choices and shortcut hints share one chip treatment.
-- **The config editor's save flow is a floating dialog** — a bordered card with a
-  drop shadow composited over the still-visible deck (lipgloss v2 layer
-  compositor), with a clean one-value-per-row summary that can't wrap.
-- **A single `KeyHint` chip** backs every shortcut bar — the dashboard footer,
-  the config command bar, and the save-dialog buttons — so they match: a
-  brighter accent key, a muted label, on a muted ground.
-- **New intro animation** — the wordmark burns in on re-entry (a hot pink-white →
-  orange → red edge cooling to amber) over a scrolling warp-streak starfield, and
-  reads "MAKING THE HITS".
+New warm amber theme, with emerald for hits and tomato for errors. The config
+editor's save step is a floating dialog over the deck instead of a full-screen
+swap. Shortcut bars all share one chip style now. New intro: the wordmark burns
+in over a scrolling starfield and reads "MAKING THE HITS".
 
-### Fixed
-
-- Field-guide prose no longer orphans words onto their own lines — it was
-  double-wrapping (manual wrap, then a `Width`-constrained border re-wrapping at a
-  narrower text area). It now wraps once, at the border's real text width.
+Fixed the field guide wrapping text into single-word lines (it was wrapping
+twice, at mismatched widths).
 
 ## 2.2.0 - 2026-07-19
 
-### Added
+Added entropy: links now behave a bit differently from each other instead of all
+looking the same. Each one gets its own device mix, traffic volume, and idle
+rhythm, and a few can go "viral" — near-max traffic, rarely idle.
 
-- **Entropy** — per-link personality, so links stop converging to one identical
-  profile and analytics show natural texture. Each link draws its own
-  desktop/mobile mix, its own traffic volume (on a long-tailed curve), and its
-  own idle rhythm; a configurable share become breakout "viral" links that hug
-  the top of the rate range and rarely go idle. Controlled by one named dial —
-  **Off · Calm · Chaos · Mayhem** (default **Chaos**) — with an advanced trio
-  (audience spread, breakout intensity, viral links %) for fine-tuning. Set it in
-  the config editor's `ENTROPY` group, via `hitmaker config set entropy <level>`,
-  or with `ENTROPY_LEVEL` / `ENTROPY_DEVICE_SPREAD` / `ENTROPY_BREAKOUT` /
-  `ENTROPY_VIRAL_PERCENT`. Level `off` reproduces the previous uniform behaviour
-  exactly. Personas are stable for a given `--seed`.
+Set the level (off/calm/chaos/mayhem, default chaos) in the config editor, with
+`config set entropy`, or via `ENTROPY_*` env vars. `off` behaves like before.
 
-### Changed
-
-- With entropy on, each link's first active phase is cut short by a random amount
-  so links reach their idle roll at staggered times instead of all going quiet at
-  once. Traffic still starts immediately.
-- Updated the Bubble Tea stack within the v1 line (`bubbletea` 1.3.4 → 1.3.10,
-  `bubbles` 0.21.0 → 1.0.0) and `cobra` (1.9.1 → 1.10.2), plus transitive
-  dependencies. (The v2 major line is a separate, later migration.)
+Also bumped the Charm libraries within the v1 line and cobra to 1.10.2.
 
 ## 2.1.3 - 2026-07-15
 
