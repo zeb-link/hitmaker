@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.1 - 2026-07-19
+
+The config editor now uses the same frame as the dashboard — same header, footer,
+and bordered side panel in the same spot — so opening it no longer shifts the
+layout. Refreshed the README screenshots.
+
 ## 2.3.0 - 2026-07-19
 
 Moved the TUI to Charm v2 (bubbletea/bubbles/lipgloss v2) and reworked the look.
