@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -32,10 +31,6 @@ const (
 type tickMsg time.Time
 type introTickMsg time.Time
 
-// introVariantCount is the number of intro animations; New picks one at random
-// each launch.
-const introVariantCount = 4
-
 // introTick drives the intro animation at ~22fps, only while the intro is on.
 func introTick() tea.Cmd {
 	return tea.Tick(45*time.Millisecond, func(t time.Time) tea.Msg { return introTickMsg(t) })
@@ -51,18 +46,17 @@ type Model struct {
 	targets []string
 	runner  *simulator.Runner
 
-	mode         mode
-	width        int
-	height       int
-	selected     int
-	scroll       int
-	snapshot     simulator.Snapshot
-	spinner      spinner.Model
-	configEdit   configEditor
-	introStart   time.Time
-	introUntil   time.Time
-	introVariant int
-	err          error
+	mode       mode
+	width      int
+	height     int
+	selected   int
+	scroll     int
+	snapshot   simulator.Snapshot
+	spinner    spinner.Model
+	configEdit configEditor
+	introStart time.Time
+	introUntil time.Time
+	err        error
 }
 
 func New(opts Options) (Model, error) {
@@ -81,8 +75,7 @@ func New(opts Options) (Model, error) {
 	}
 	if !opts.NoIntro {
 		m.introStart = time.Now()
-		m.introUntil = m.introStart.Add(1400 * time.Millisecond)
-		m.introVariant = rand.IntN(introVariantCount)
+		m.introUntil = m.introStart.Add(1600 * time.Millisecond)
 	}
 	return m, nil
 }
@@ -222,191 +215,190 @@ func buildBanner(word string) []string {
 	return rows
 }
 
-var hitmakerBanner = buildBanner("HITMAKER")
+// hitmakerBanner is a compact half-height wordmark: the 5-row block letters
+// squeezed to 3 rows with ▀▄█ so the "logo" reads small and dense.
+var hitmakerBanner = compressRows(buildBanner("HITMAKER"))
 
-func (m Model) introView() string {
-	var head string
-	if m.width >= 50 {
-		head = m.animatedBanner()
-	} else {
-		head = m.animatedIntroText("H I T M A K E R")
+// compressRows squeezes each pair of rows into one using half-block glyphs, so a
+// 5-row banner becomes 3 rows. Alignment is preserved because it's algorithmic.
+func compressRows(rows []string) []string {
+	width := 0
+	for _, r := range rows {
+		if n := len([]rune(r)); n > width {
+			width = n
+		}
 	}
-	body := lipgloss.JoinVertical(lipgloss.Center,
-		head,
-		"",
-		theme.Subtle.Render("synthetic traffic engine"),
-		"",
-		theme.Focus.Render(m.spinner.View()+" warming up"),
-	)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
+	pairs := [][2]int{{0, 1}, {2, 3}, {4, -1}}
+	out := make([]string, len(pairs))
+	for pi, p := range pairs {
+		top := []rune(padRight(rows[p[0]], width))
+		bot := []rune(strings.Repeat(" ", width))
+		if p[1] >= 0 {
+			bot = []rune(padRight(rows[p[1]], width))
+		}
+		var b strings.Builder
+		for c := 0; c < width; c++ {
+			t, bo := top[c] != ' ', bot[c] != ' '
+			switch {
+			case t && bo:
+				b.WriteRune('█')
+			case t:
+				b.WriteRune('▀')
+			case bo:
+				b.WriteRune('▄')
+			default:
+				b.WriteRune(' ')
+			}
+		}
+		out[pi] = b.String()
+	}
+	return out
 }
 
+func padRight(s string, w int) string {
+	r := []rune(s)
+	for len(r) < w {
+		r = append(r, ' ')
+	}
+	return string(r)
+}
+
+// introView composites the burning wordmark reveal over a warp-streak starfield,
+// so the mark reads as if it's tearing in through space on re-entry.
+func (m Model) introView() string {
+	logo := m.animatedBanner()
+	if m.width < 44 {
+		logo = m.animatedIntroText("HITMAKER")
+	}
+	subtitle := lipgloss.NewStyle().Foreground(theme.Muted).Render("making the hits")
+	block := lipgloss.JoinVertical(lipgloss.Center, logo, "", subtitle)
+	bw, bh := lipgloss.Width(block), lipgloss.Height(block)
+	x := max(0, (m.width-bw)/2)
+	y := max(0, (m.height-bh)/2)
+	return lipgloss.NewCompositor(
+		lipgloss.NewLayer(m.starfield(m.width, m.height)).Z(0),
+		lipgloss.NewLayer(block).X(x).Y(y).Z(1),
+	).Render()
+}
+
+// Re-entry heat ramp: a hot pink-white leading edge cooling through orange and
+// red to the amber CRT phosphor. Starfield streaks are cool white/grey.
 var (
-	introAmber   = lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
-	introGold    = lipgloss.NewStyle().Foreground(theme.Gold).Bold(true)
-	introEmerald = lipgloss.NewStyle().Foreground(theme.Emerald).Bold(true)
-	introFaint   = lipgloss.NewStyle().Foreground(theme.Dim)
-	introMuted   = lipgloss.NewStyle().Foreground(theme.Muted)
+	introAmber  = lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
+	introRim    = lipgloss.NewStyle().Foreground(lipgloss.Color("#e8963a")).Bold(true) // warm top edge
+	introEmber  = lipgloss.NewStyle().Foreground(lipgloss.Color("#dd7a34")).Bold(true)
+	introRed    = lipgloss.NewStyle().Foreground(lipgloss.Color("#e8493a")).Bold(true)
+	introOrange = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff8a3c")).Bold(true)
+	introHot    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcbb0")).Bold(true) // pink-white hot
+	starBright  = lipgloss.NewStyle().Foreground(lipgloss.Color("#efe7db"))
+	starDim     = lipgloss.NewStyle().Foreground(theme.Dim)
 )
 
-// animatedBanner dispatches to one of the intro animations, chosen at random per
-// launch. Each renders the current frame of the HITMAKER block wordmark from the
-// elapsed time.
+// animatedBanner reveals the wordmark top to bottom; each row ignites hot as it
+// appears and cools to amber — the mark burning in on re-entry.
 func (m Model) animatedBanner() string {
 	elapsed := time.Since(m.introStart)
 	if m.introStart.IsZero() {
 		elapsed = 0
 	}
 	ms := elapsed.Milliseconds()
-	frame := int(elapsed / (45 * time.Millisecond))
-	switch m.introVariant {
-	case 1:
-		return bannerRain(ms)
-	case 2:
-		return bannerScanline(ms)
-	case 3:
-		return bannerGlitch(ms, frame)
+	const stepMs = 150
+	rows := make([]string, len(hitmakerBanner))
+	for r, line := range hitmakerBanner {
+		revealAt := int64(r) * stepMs
+		if ms < revealAt {
+			rows[r] = strings.Repeat(" ", len([]rune(line)))
+			continue
+		}
+		st := heatStyle(ms-revealAt, r)
+		var b strings.Builder
+		for _, ch := range line {
+			if ch == ' ' {
+				b.WriteByte(' ')
+			} else {
+				b.WriteString(st.Render(string(ch)))
+			}
+		}
+		rows[r] = b.String()
+	}
+	return strings.Join(rows, "\n")
+}
+
+func heatStyle(age int64, row int) lipgloss.Style {
+	switch {
+	case age < 45:
+		return introHot
+	case age < 110:
+		return introOrange
+	case age < 200:
+		return introRed
+	case age < 320:
+		return introEmber
 	default:
-		return bannerDecode(ms, frame)
+		if row == 0 {
+			return introRim // the top rim keeps a warm ember tint
+		}
+		return introAmber
 	}
 }
 
-// bannerDecode scrambles each cell through tech glyphs, then resolves to the
-// solid block left to right with a gold flash — a "decrypt" reveal.
-func bannerDecode(ms int64, frame int) string {
-	scramble := []rune("▚▞▓▒░╱╲╳┃━╋┿╪01")
-	rows := make([]string, len(hitmakerBanner))
-	for row, line := range hitmakerBanner {
-		var b strings.Builder
-		col := 0
-		for _, r := range line {
-			if r == ' ' {
-				b.WriteByte(' ')
-				col++
-				continue
+// starfield renders sparse horizontal warp streaks scrolling left, at parallax
+// speeds, behind the wordmark.
+func (m Model) starfield(width, height int) string {
+	if width <= 0 || height <= 0 {
+		return ""
+	}
+	elapsed := time.Since(m.introStart)
+	if m.introStart.IsZero() {
+		elapsed = 0
+	}
+	frame := int(elapsed / (45 * time.Millisecond))
+	rows := make([]string, height)
+	for y := 0; y < height; y++ {
+		line := []rune(strings.Repeat(" ", width))
+		for s := 0; s < 1+(y*13+7)%3; s++ {
+			seed := y*29 + s*53 + 11
+			speed := 4 + seed%5
+			length := 2 + seed%7
+			span := width + 24
+			x := ((seed % span) - frame*speed) % span
+			if x < 0 {
+				x += span
 			}
-			resolveAt := int64(60 + col*11)
-			switch {
-			case ms >= resolveAt+70:
-				b.WriteString(introAmber.Render("█"))
-			case ms >= resolveAt:
-				b.WriteString(introGold.Render("█"))
-			default:
-				ch := scramble[(col*7+row*13+frame*5)%len(scramble)]
-				style := introFaint
-				if (col+frame)%3 == 0 {
-					style = introMuted
+			x -= 12
+			for k := 0; k < length; k++ {
+				if px := x + k; px >= 0 && px < width {
+					line[px] = '─'
 				}
-				b.WriteString(style.Render(string(ch)))
 			}
-			col++
 		}
-		rows[row] = b.String()
+		st := starDim
+		if (y+frame/6)%5 == 0 {
+			st = starBright
+		}
+		rows[y] = st.Render(string(line))
 	}
 	return strings.Join(rows, "\n")
 }
 
-// bannerRain fills each column from the top with an emerald falling head leaving
-// an amber trail — hits landing and stacking up.
-func bannerRain(ms int64) string {
-	rows := make([]string, len(hitmakerBanner))
-	for row, line := range hitmakerBanner {
-		var b strings.Builder
-		col := 0
-		for _, r := range line {
-			if r == ' ' {
-				b.WriteByte(' ')
-				col++
-				continue
-			}
-			filled := int((ms - int64(col*7)) / 55)
-			switch {
-			case filled > row:
-				b.WriteString(introAmber.Render("█"))
-			case filled == row:
-				b.WriteString(introEmerald.Render("▀"))
-			default:
-				b.WriteByte(' ')
-			}
-			col++
-		}
-		rows[row] = b.String()
-	}
-	return strings.Join(rows, "\n")
-}
-
-// bannerScanline sweeps a bright line down the wordmark with a phosphor glow —
-// a CRT power-on.
-func bannerScanline(ms int64) string {
-	scan := int(ms / 75)
-	settled := ms > int64((len(hitmakerBanner)+1)*75)
-	rows := make([]string, len(hitmakerBanner))
-	for row, line := range hitmakerBanner {
-		var b strings.Builder
-		for _, r := range line {
-			if r == ' ' {
-				b.WriteByte(' ')
-				continue
-			}
-			switch {
-			case settled, row < scan-1:
-				b.WriteString(introAmber.Render("█"))
-			case row <= scan:
-				b.WriteString(introGold.Render("█"))
-			default:
-				b.WriteString(introFaint.Render("░"))
-			}
-		}
-		rows[row] = b.String()
-	}
-	return strings.Join(rows, "\n")
-}
-
-// bannerGlitch jitters the rows with channel-split color offsets, then snaps into
-// aligned amber.
-func bannerGlitch(ms int64, frame int) string {
-	if ms > 420 {
-		rows := make([]string, len(hitmakerBanner))
-		for row, line := range hitmakerBanner {
-			rows[row] = introAmber.Render(line)
-		}
-		return strings.Join(rows, "\n")
-	}
-	styles := []lipgloss.Style{introAmber, introGold, introEmerald}
-	rows := make([]string, len(hitmakerBanner))
-	for row, line := range hitmakerBanner {
-		off := (row*3 + frame*7) % 4
-		style := styles[(row+frame)%len(styles)]
-		rows[row] = strings.Repeat(" ", off) + style.Render(line)
-	}
-	return strings.Join(rows, "\n")
-}
-
+// animatedIntroText is the narrow-terminal fallback: a left-to-right burn reveal
+// of the plain wordmark.
 func (m Model) animatedIntroText(text string) string {
 	elapsed := time.Since(m.introStart)
 	if m.introStart.IsZero() {
 		elapsed = 0
 	}
-	wave := int(elapsed/(20*time.Millisecond)) - 2
-	base := lipgloss.NewStyle().Foreground(theme.Amber).Bold(true)
-	glow := lipgloss.NewStyle().Foreground(theme.Gold).Bold(true)
-	crest := lipgloss.NewStyle().Foreground(theme.Emerald).Bold(true)
-	parts := make([]string, 0, len(text))
+	ms := elapsed.Milliseconds()
+	var b strings.Builder
 	for i, r := range text {
-		if r == ' ' {
-			parts = append(parts, " ")
+		revealAt := int64(i) * 45
+		if ms < revealAt {
+			b.WriteByte(' ')
 			continue
 		}
-		switch d := i - wave; {
-		case d == 0:
-			parts = append(parts, crest.Render(string(r)))
-		case d >= -1 && d <= 1:
-			parts = append(parts, glow.Render(string(r)))
-		default:
-			parts = append(parts, base.Render(string(r)))
-		}
+		b.WriteString(heatStyle(ms-revealAt, 0).Render(string(r)))
 	}
-	return strings.Join(parts, "")
+	return b.String()
 }
 
 func (m Model) dashboardView() string {

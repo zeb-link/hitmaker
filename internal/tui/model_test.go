@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 )
 
@@ -33,47 +32,36 @@ func TestIntroViewRendersAnimatedBanner(t *testing.T) {
 	m := Model{
 		width:  100,
 		height: 32,
-		// Well past the animation so every variant has resolved to the solid
-		// wordmark, whichever one was picked.
+		// Well past the reveal so the wordmark has fully burned in to amber.
 		introStart: time.Now().Add(-3 * time.Second),
 		introUntil: time.Now().Add(-2 * time.Second),
 	}
-	m.spinner = spinner.New()
-	m.spinner.Spinner = spinner.Spinner{Frames: []string{"●"}}
-	// lipgloss v2 emits color escapes even off a TTY, and the banner is rendered
-	// one glyph-cell at a time for the rainbow animation — so the block run is
-	// split by escape codes. Strip ANSI before asserting the visible shape.
+	// lipgloss v2 emits color escapes even off a TTY, so strip ANSI before
+	// asserting on the visible glyphs.
 	plain := stripANSI(m.introView())
-	if !strings.Contains(plain, "█████") {
-		t.Fatalf("intro missing block banner:\n%s", plain)
+	if !strings.ContainsAny(plain, "█▀▄") {
+		t.Fatalf("intro missing block wordmark:\n%s", plain)
 	}
-	if !strings.Contains(plain, "synthetic traffic engine") {
+	if !strings.Contains(plain, "making the hits") {
 		t.Fatalf("intro missing subtitle:\n%s", plain)
-	}
-	if !strings.Contains(plain, "warming up") {
-		t.Fatalf("intro missing loading text:\n%s", plain)
 	}
 }
 
-func TestIntroVariantsRenderAtEveryFrame(t *testing.T) {
-	for v := 0; v < introVariantCount; v++ {
-		for _, ms := range []int{0, 40, 120, 300, 600, 1200} {
-			m := Model{
-				width:        100,
-				height:       32,
-				introVariant: v,
-				introStart:   time.Now().Add(-time.Duration(ms) * time.Millisecond),
-				introUntil:   time.Now().Add(time.Second),
-			}
-			m.spinner = spinner.New()
-			m.spinner.Spinner = spinner.Spinner{Frames: []string{"●"}}
-			out := m.animatedBanner()
-			if strings.TrimSpace(stripANSI(out)) == "" {
-				t.Fatalf("variant %d produced an empty banner at %dms", v, ms)
-			}
-			if lines := strings.Count(out, "\n") + 1; lines != len(hitmakerBanner) {
-				t.Fatalf("variant %d at %dms rendered %d rows, want %d", v, ms, lines, len(hitmakerBanner))
-			}
+func TestIntroBannerRendersAtEveryFrame(t *testing.T) {
+	for _, ms := range []int{0, 40, 150, 320, 600, 1200} {
+		m := Model{
+			width:      100,
+			height:     32,
+			introStart: time.Now().Add(-time.Duration(ms) * time.Millisecond),
+			introUntil: time.Now().Add(time.Second),
+		}
+		out := m.animatedBanner()
+		if lines := strings.Count(out, "\n") + 1; lines != len(hitmakerBanner) {
+			t.Fatalf("banner at %dms rendered %d rows, want %d", ms, lines, len(hitmakerBanner))
+		}
+		// The whole intro (starfield + wordmark + subtitle) must always compose.
+		if strings.TrimSpace(stripANSI(m.introView())) == "" {
+			t.Fatalf("intro produced empty output at %dms", ms)
 		}
 	}
 }
