@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.2.0 - 2026-07-19
+
+### Added
+
+- **Entropy** — per-link personality, so links stop converging to one identical
+  profile and analytics show natural texture. Each link draws its own
+  desktop/mobile mix, its own traffic volume (on a long-tailed curve), and its
+  own idle rhythm; a configurable share become breakout "viral" links that hug
+  the top of the rate range and rarely go idle. Controlled by one named dial —
+  **Off · Calm · Chaos · Mayhem** (default **Chaos**) — with an advanced trio
+  (audience spread, breakout intensity, viral links %) for fine-tuning. Set it in
+  the config editor's `ENTROPY` group, via `hitmaker config set entropy <level>`,
+  or with `ENTROPY_LEVEL` / `ENTROPY_DEVICE_SPREAD` / `ENTROPY_BREAKOUT` /
+  `ENTROPY_VIRAL_PERCENT`. Level `off` reproduces the previous uniform behaviour
+  exactly. Personas are stable for a given `--seed`.
+
+### Changed
+
+- With entropy on, each link's first active phase is cut short by a random amount
+  so links reach their idle roll at staggered times instead of all going quiet at
+  once. Traffic still starts immediately.
+- Updated the Bubble Tea stack within the v1 line (`bubbletea` 1.3.4 → 1.3.10,
+  `bubbles` 0.21.0 → 1.0.0) and `cobra` (1.9.1 → 1.10.2), plus transitive
+  dependencies. (The v2 major line is a separate, later migration.)
+
 ## 2.1.3 - 2026-07-15
 
 ### Security
