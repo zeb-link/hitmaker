@@ -815,6 +815,10 @@ func (e configEditor) fieldGuideView(width, height int) string {
 	field := e.fields[e.focus]
 	guide := e.fieldGuide(field)
 	innerWidth := max(20, width-4)
+	// The border draws its own frame (border + padding). Wrap prose to the real
+	// text area inside that frame, so lipgloss doesn't re-wrap our lines and
+	// orphan the last word of each one.
+	textWidth := max(12, innerWidth-theme.Border.GetHorizontalFrameSize())
 	lines := []string{
 		theme.Title.Render("FIELD GUIDE"),
 		theme.Focus.Render(field.group + " / " + field.label),
@@ -823,11 +827,11 @@ func (e configEditor) fieldGuideView(width, height int) string {
 	if current := e.guideCurrentValue(field); current != "" {
 		lines = append(lines, theme.Subtle.Render("Current"), "", current, "", "")
 	}
-	lines = append(lines, wrapStyled(guide.summary, innerWidth)...)
+	lines = append(lines, wrapStyled(guide.summary, textWidth)...)
 	if len(guide.details) > 0 {
 		lines = append(lines, "")
 		for _, detail := range guide.details {
-			lines = append(lines, wrapBullet(detail, innerWidth)...)
+			lines = append(lines, wrapBullet(detail, textWidth)...)
 		}
 	}
 	if e.fieldDisabled(field) {

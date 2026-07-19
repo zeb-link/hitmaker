@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -187,6 +188,28 @@ func TestConfigEditorFitsStandardTerminal(t *testing.T) {
 	for _, want := range []string{"CONTROL DECK", "KEYS"} {
 		if !contains(view, want) {
 			t.Fatalf("compact view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestFieldGuideWrapsWithoutOrphans(t *testing.T) {
+	editor := newConfigEditor(config.Default())
+	for i, f := range editor.fields {
+		if f.key == "mode" {
+			editor.focus = i
+			break
+		}
+	}
+	out := stripANSI(editor.fieldGuideView(64, 40))
+	// The double-wrap bug split trailing words onto their own line. The summary
+	// should keep words together up to the real text width.
+	if !contains(out, "come from. Identity,") {
+		t.Fatalf("summary double-wrapped — expected 'come from. Identity,' on one line:\n%s", out)
+	}
+	for _, ln := range strings.Split(out, "\n") {
+		word := strings.TrimSpace(strings.Trim(ln, "│╭╮╰╯─ "))
+		if word == "Identity," || word == "internal" {
+			t.Fatalf("orphaned word %q — field guide is double-wrapping:\n%s", word, out)
 		}
 	}
 }
