@@ -678,12 +678,14 @@ func (e configEditor) editorColumnWidths(width int) (int, int) {
 	if width < 118 {
 		return width, 0
 	}
-	left := 74
-	if width >= 140 {
-		left = 82
+	// The control deck only needs ~50 columns; give the rest to the field guide
+	// so its prose wraps with room to breathe instead of orphaning words.
+	left := 52
+	if width >= 150 {
+		left = 58
 	}
 	right := width - left - 2
-	if right < 38 {
+	if right < 34 {
 		return width, 0
 	}
 	return left, right
@@ -819,7 +821,7 @@ func (e configEditor) fieldGuideView(width, height int) string {
 		"",
 	}
 	if current := e.guideCurrentValue(field); current != "" {
-		lines = append(lines, theme.Subtle.Render("Current"), current, "")
+		lines = append(lines, theme.Subtle.Render("Current"), "", current, "", "")
 	}
 	lines = append(lines, wrapStyled(guide.summary, innerWidth)...)
 	if len(guide.details) > 0 {
@@ -831,7 +833,6 @@ func (e configEditor) fieldGuideView(width, height int) string {
 	if e.fieldDisabled(field) {
 		lines = append(lines, "", theme.Warn.Render("Disabled"), theme.Subtle.Render("Enable Auto or Proxy service origin mode to edit this field."))
 	}
-	lines = append(lines, "", theme.Subtle.Render(e.fieldInstructions(field)))
 	maxLines := max(4, height-2)
 	if len(lines) > maxLines {
 		lines = append(lines[:maxLines-1], theme.Subtle.Render("…"))
@@ -1166,11 +1167,19 @@ func sliderPlain(value, minValue, maxValue float64) string {
 		ratio = (value - minValue) / (maxValue - minValue)
 	}
 	filled := clampInt(int(ratio*cells+0.5), 0, cells)
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", cells-filled)
-	if maxValue == 1 {
-		return fmt.Sprintf("%s %.0f%%", bar, value*100)
+	var bar string
+	switch {
+	case filled <= 0:
+		bar = "╺" + strings.Repeat("─", max(0, cells-1))
+	case filled >= cells:
+		bar = strings.Repeat("━", cells)
+	default:
+		bar = strings.Repeat("━", filled-1) + "●" + strings.Repeat("─", cells-filled)
 	}
-	return fmt.Sprintf("%s %.0f", bar, value)
+	if maxValue == 1 {
+		return fmt.Sprintf("%s   %.0f%%", bar, value*100)
+	}
+	return fmt.Sprintf("%s   %.0f", bar, value)
 }
 
 func radioSegmentPlain(active string, options []selectOption) string {
@@ -1252,12 +1261,22 @@ func slider(value, minValue, maxValue float64) string {
 		ratio = (value - minValue) / (maxValue - minValue)
 	}
 	filled := clampInt(int(ratio*cells+0.5), 0, cells)
-	// Blocky retro meter — a nod to the old block-graphics look.
-	bar := theme.Focus.Render(strings.Repeat("█", filled)) + theme.Subtle.Render(strings.Repeat("░", cells-filled))
-	if maxValue == 1 {
-		return fmt.Sprintf("%s %.0f%%", bar, value*100)
+	// Thin rail — a filled amber line with a knob, then a light remainder. Reads
+	// as a slider without the hard pixel edges of block glyphs.
+	track := theme.Subtle.Render(strings.Repeat("─", cells-filled))
+	var bar string
+	switch {
+	case filled <= 0:
+		bar = theme.Focus.Render("╺") + theme.Subtle.Render(strings.Repeat("─", max(0, cells-1)))
+	case filled >= cells:
+		bar = theme.Focus.Render(strings.Repeat("━", cells))
+	default:
+		bar = theme.Focus.Render(strings.Repeat("━", filled-1)+"●") + track
 	}
-	return fmt.Sprintf("%s %.0f", bar, value)
+	if maxValue == 1 {
+		return fmt.Sprintf("%s   %.0f%%", bar, value*100)
+	}
+	return fmt.Sprintf("%s   %.0f", bar, value)
 }
 
 func meter(value, maxValue float64) string {
