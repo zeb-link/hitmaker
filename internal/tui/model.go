@@ -371,9 +371,9 @@ func (m Model) tableView(snap simulator.Snapshot, width, height int) string {
 		cells := fmt.Sprintf(cols, name,
 			fmt.Sprintf("%d", t.Hits), fmt.Sprintf("%d/m", t.CurrentRate), fmt.Sprintf("%d", t.Errors), url)
 		if i == m.selected {
-			// One plain-text style so the highlight fills the whole row — nesting
-			// colored spans breaks the background mid-line.
-			lines = append(lines, theme.SelectedRow.Width(width).Render(" "+statusRune(t)+" "+cells))
+			// Quiet focus: an amber left tick, keeping the colored status glyph and
+			// row text. No background fill, so the row can never wrap.
+			lines = append(lines, theme.Tick.Render("▌")+statusGlyph(t)+" "+cells)
 		} else {
 			lines = append(lines, " "+statusGlyph(t)+" "+cells)
 		}
@@ -382,19 +382,6 @@ func (m Model) tableView(snap simulator.Snapshot, width, height int) string {
 		lines = append(lines, "", theme.Subtle.Render("  No targets yet."))
 	}
 	return clampLines(lines, height)
-}
-
-func statusRune(target simulator.TargetStats) string {
-	switch {
-	case target.Paused:
-		return "⏸"
-	case target.Errors > 0 && target.Hits == 0:
-		return "✕"
-	case target.ActiveWorkers == 0:
-		return "○"
-	default:
-		return "●"
-	}
 }
 
 func statusGlyph(target simulator.TargetStats) string {

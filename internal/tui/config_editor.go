@@ -72,7 +72,7 @@ type configEditor struct {
 func newConfigEditor(cfg config.Config) configEditor {
 	input := textinput.New()
 	st := textinput.DefaultDarkStyles()
-	st.Cursor.Color = theme.HotPink
+	st.Cursor.Color = theme.Accent
 	input.SetStyles(st)
 	input.Prompt = theme.Focus.Render("⣿ ")
 	input.CharLimit = 512
@@ -756,8 +756,10 @@ func (e configEditor) fieldsView(width, height int) string {
 		selected := i == e.focus && e.pane == paneFields
 		if selected {
 			selectedLine = len(lines)
-			row := fmt.Sprintf("● %-18s %s", field.label, e.displayValuePlain(field))
-			lines = append(lines, theme.SelectedRow.Width(innerWidth).Render(row))
+			// Quiet focus: an amber left tick + amber-bold label, keeping the row's
+			// own colors. No width-padded background, so it can never wrap.
+			label := theme.Focus.Render(fmt.Sprintf("%-18s", field.label))
+			lines = append(lines, theme.Tick.Render("▌")+" "+label+" "+e.displayValue(field))
 		} else {
 			line := fmt.Sprintf("  %-18s %s", field.label, e.displayValue(field))
 			if disabled {
@@ -1164,7 +1166,7 @@ func sliderPlain(value, minValue, maxValue float64) string {
 		ratio = (value - minValue) / (maxValue - minValue)
 	}
 	filled := clampInt(int(ratio*cells+0.5), 0, cells)
-	bar := strings.Repeat("━", filled) + strings.Repeat("─", cells-filled)
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", cells-filled)
 	if maxValue == 1 {
 		return fmt.Sprintf("%s %.0f%%", bar, value*100)
 	}
@@ -1250,7 +1252,8 @@ func slider(value, minValue, maxValue float64) string {
 		ratio = (value - minValue) / (maxValue - minValue)
 	}
 	filled := clampInt(int(ratio*cells+0.5), 0, cells)
-	bar := theme.Focus.Render(strings.Repeat("━", filled)) + theme.Subtle.Render(strings.Repeat("─", cells-filled))
+	// Blocky retro meter — a nod to the old block-graphics look.
+	bar := theme.Focus.Render(strings.Repeat("█", filled)) + theme.Subtle.Render(strings.Repeat("░", cells-filled))
 	if maxValue == 1 {
 		return fmt.Sprintf("%s %.0f%%", bar, value*100)
 	}
