@@ -11,11 +11,14 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
 	"github.com/zeb-link/hitmaker/v2/internal/simulator"
 	"github.com/zeb-link/hitmaker/v2/internal/tui"
+	"github.com/zeb-link/hitmaker/v2/internal/ui/theme"
 )
 
 type rootOptions struct {
@@ -23,6 +26,25 @@ type rootOptions struct {
 	Config  bool
 	NoIntro bool
 	Version string
+}
+
+// resolveDarkBackground decides which theme ground to paint. HITMAKER_THEME wins
+// (light|dark), so anyone can pin it regardless of what the terminal reports —
+// and so the `frame` command can render either ground for docs. Otherwise we ask
+// the terminal, but only when stdin and stdout are both real TTYs; piped or
+// redirected runs skip the query (which would otherwise leak an escape sequence
+// into the output) and fall back to dark.
+func resolveDarkBackground() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HITMAKER_THEME"))) {
+	case "light":
+		return false
+	case "dark":
+		return true
+	}
+	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
+		return true
+	}
+	return lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 }
 
 func Execute(version string) {
@@ -67,6 +89,13 @@ hitmaker config edit`),
 		// rejects `hitmaker <url>` with "unknown command". Registered subcommands
 		// (run, tui, ...) still match first and take precedence.
 		Args: cobra.ArbitraryArgs,
+		// Match the terminal's ground before anything renders. This covers the
+		// plain-text commands (run/bots/probe summaries) directly; the Bubble Tea
+		// dashboards start from this value and then refine it via
+		// tea.BackgroundColorMsg.
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			theme.Configure(resolveDarkBackground())
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.Config {
 				return runConfigEditor()

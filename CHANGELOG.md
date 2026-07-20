@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.4.0 - 2026-07-20
+
+Light mode. Yes, some of you run your terminals with a white background, and no,
+we will not be staging an intervention. 🤪
+
+Hitmaker now asks your terminal which way it swings and paints itself to match.
+Dark ground gets the same warm Ember look as before. Light ground gets a mirror
+of it with darker ink and softer surfaces so the text is actually readable
+instead of a faint smudge you have to squint at. The dashboard and config editor
+pick it up live via the terminal's background reply; the plain `run`, `bots`, and
+`probe` printouts detect it up front. If your terminal refuses to answer, we
+assume dark and carry on.
+
+Not everyone's terminal answers the "what's your background" question honestly,
+so `HITMAKER_THEME=light` or `HITMAKER_THEME=dark` pins it and skips the guessing.
+
 ## 2.3.1 - 2026-07-19
 
 The config editor now uses the same frame as the dashboard — same header, footer,

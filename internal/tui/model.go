@@ -82,7 +82,9 @@ func New(opts Options) (Model, error) {
 
 func (m Model) Init() tea.Cmd {
 	m.runner.Start()
-	return tea.Batch(m.spinner.Tick, tick(), introTick())
+	// RequestBackgroundColor asks the terminal for its ground; the reply arrives
+	// as tea.BackgroundColorMsg in Update, where we retint the theme.
+	return tea.Batch(m.spinner.Tick, tick(), introTick(), tea.RequestBackgroundColor)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -91,6 +93,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+	case tea.BackgroundColorMsg:
+		// Terminal told us its ground — retint. Views read theme.* fresh each
+		// frame, so the next render adapts.
+		theme.Configure(msg.IsDark())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)

@@ -5,6 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/zeb-link/hitmaker/v2/internal/config"
+	"github.com/zeb-link/hitmaker/v2/internal/ui/theme"
 )
 
 type ConfigModel struct {
@@ -24,7 +25,9 @@ func NewConfigModel(cfg config.Config) ConfigModel {
 }
 
 func (m ConfigModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	// Ask the terminal for its ground so the editor retints to match (reply
+	// arrives as tea.BackgroundColorMsg below).
+	return tea.Batch(m.spinner.Tick, tea.RequestBackgroundColor)
 }
 
 func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -32,6 +35,8 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+	case tea.BackgroundColorMsg:
+		theme.Configure(msg.IsDark())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
