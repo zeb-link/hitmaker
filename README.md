@@ -14,8 +14,8 @@ active/idle scheduling.
 It is a standalone tool written in Go. Targets are opaque `http` or `https`
 URLs — no product API, no auth, no coupling to anything.
 
-We built it to exercise the analytics pipeline behind
-[Zebra](https://zeblink.io), the short link operating system, and kept it
+It was built to exercise the analytics pipeline behind
+[Zebra](https://zeblink.io), the short link operating system, and kept
 standalone so it works against anything that answers HTTP.
 
 ![Hitmaker live dashboard](docs/dashboard.png)
