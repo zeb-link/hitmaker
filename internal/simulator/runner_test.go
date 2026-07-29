@@ -58,7 +58,7 @@ func TestSeedReproducibleIdentity(t *testing.T) {
 	}
 }
 
-func TestAutoModeUsesVercelHeadersForLocalTargets(t *testing.T) {
+func TestAutoModeUsesCloudflareHeadersForLocalTargets(t *testing.T) {
 	seen := make(chan http.Header, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen <- r.Header.Clone()
@@ -77,8 +77,65 @@ func TestAutoModeUsesVercelHeadersForLocalTargets(t *testing.T) {
 		t.Fatalf("probe status=%d err=%q", got.Status, got.Err)
 	}
 	headers := <-seen
+	if headers.Get("x-hitmaker-country") == "" || headers.Get("cf-connecting-ip") == "" {
+		t.Fatalf("auto local target did not receive Cloudflare geo headers: %#v", headers)
+	}
+}
+
+func TestSpoofModeCloudflareEdgeAppliesCloudflareHeaders(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig()
+	cfg.Origin.Mode = config.ModeSpoof
+	cfg.Origin.Edge = config.EdgeCloudflare
+	r, err := New(context.Background(), Options{Config: cfg, Targets: []string{srv.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Probe(srv.URL)
+	if got.Err != "" || got.Status != 200 {
+		t.Fatalf("probe status=%d err=%q", got.Status, got.Err)
+	}
+	headers := <-seen
+	if headers.Get("cf-connecting-ip") == "" || headers.Get("cf-ipcountry") == "" ||
+		headers.Get("x-hitmaker-country") == "" || headers.Get("x-hitmaker-city") == "" {
+		t.Fatalf("cloudflare edge did not apply Cloudflare geo headers: %#v", headers)
+	}
+	if headers.Get("x-vercel-ip-country") != "" {
+		t.Fatalf("cloudflare edge leaked Vercel headers: %#v", headers)
+	}
+}
+
+func TestSpoofModeVercelEdgeAppliesVercelHeaders(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig()
+	cfg.Origin.Mode = config.ModeSpoof
+	cfg.Origin.Edge = config.EdgeVercel
+	r, err := New(context.Background(), Options{Config: cfg, Targets: []string{srv.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Probe(srv.URL)
+	if got.Err != "" || got.Status != 200 {
+		t.Fatalf("probe status=%d err=%q", got.Status, got.Err)
+	}
+	headers := <-seen
 	if headers.Get("x-vercel-ip-country") == "" || headers.Get("x-forwarded-for") == "" {
-		t.Fatalf("auto local target did not receive Vercel geo headers: %#v", headers)
+		t.Fatalf("vercel edge did not apply Vercel geo headers: %#v", headers)
+	}
+	if headers.Get("x-hitmaker-country") != "" || headers.Get("cf-ipcountry") != "" {
+		t.Fatalf("vercel edge leaked Cloudflare headers: %#v", headers)
 	}
 }
 

@@ -20,10 +20,21 @@ const (
 type Mode string
 
 const (
-	ModeNone   Mode = "none"
-	ModeAuto   Mode = "auto"
-	ModeVercel Mode = "vercel"
-	ModeProxy  Mode = "proxy"
+	ModeOff   Mode = "off"
+	ModeAuto  Mode = "auto"
+	ModeSpoof Mode = "spoof"
+	ModeProxy Mode = "proxy"
+)
+
+// Edge is the edge provider whose geo/IP headers a direct (spoof) request
+// mimics. It is orthogonal to Mode: routing (direct vs paid proxy) is Mode's
+// job, while Edge only decides which header set a spoofed request carries.
+// Consulted by ModeSpoof and by ModeAuto's local/internal branch.
+type Edge string
+
+const (
+	EdgeVercel     Edge = "vercel"
+	EdgeCloudflare Edge = "cloudflare"
 )
 
 type Config struct {
@@ -142,6 +153,7 @@ func (e EntropyConfig) Params() EntropyParams {
 
 type OriginConfig struct {
 	Mode           Mode              `json:"mode"`
+	Edge           Edge              `json:"edge,omitempty"`
 	Provider       string            `json:"provider,omitempty"`
 	ProviderConfig map[string]string `json:"providerConfig,omitempty"`
 }
@@ -200,6 +212,7 @@ type PartialEntropy struct {
 
 type PartialOrigin struct {
 	Mode           *Mode              `json:"mode,omitempty"`
+	Edge           *Edge              `json:"edge,omitempty"`
 	Provider       *string            `json:"provider,omitempty"`
 	ProviderConfig *map[string]string `json:"providerConfig,omitempty"`
 }
@@ -241,7 +254,8 @@ func Default() Config {
 			ViralPercent: 5,
 		},
 		Origin: OriginConfig{
-			Mode: ModeNone,
+			Mode: ModeOff,
+			Edge: EdgeCloudflare,
 		},
 	}
 }
@@ -283,6 +297,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	merge(&cfg, env)
+	cfg.Normalize()
 	return cfg, cfg.Validate()
 }
 
@@ -308,6 +323,31 @@ func ResetGlobal() error {
 		return nil
 	}
 	return err
+}
+
+// Normalize canonicalizes origin settings before validation. It folds legacy
+// mode strings — from older configs, env vars, or `--mode`/`config set mode`
+// input — into their current names: the edge-named modes ("vercel"/"cloudflare"
+// /"cf") become ModeSpoof plus the matching Edge, and "none" becomes ModeOff.
+// It also defaults an unset Edge to Cloudflare (the live edge). Idempotent.
+func (c *Config) Normalize() {
+	switch c.Origin.Mode {
+	case "none":
+		c.Origin.Mode = ModeOff
+	case "vercel":
+		c.Origin.Mode = ModeSpoof
+		if c.Origin.Edge == "" {
+			c.Origin.Edge = EdgeVercel
+		}
+	case "cloudflare", "cf":
+		c.Origin.Mode = ModeSpoof
+		if c.Origin.Edge == "" {
+			c.Origin.Edge = EdgeCloudflare
+		}
+	}
+	if c.Origin.Edge == "" {
+		c.Origin.Edge = EdgeCloudflare
+	}
 }
 
 func (c Config) Validate() error {
@@ -360,9 +400,14 @@ func (c Config) Validate() error {
 		return errors.New("entropy viralPercent must be 0..100")
 	}
 	switch c.Origin.Mode {
-	case ModeNone, ModeAuto, ModeVercel, ModeProxy:
+	case ModeOff, ModeAuto, ModeSpoof, ModeProxy:
 	default:
 		return fmt.Errorf("unknown origin mode %q", c.Origin.Mode)
+	}
+	switch c.Origin.Edge {
+	case EdgeVercel, EdgeCloudflare:
+	default:
+		return fmt.Errorf("unknown edge %q", c.Origin.Edge)
 	}
 	if _, err := c.BotFilter(); err != nil {
 		return err
@@ -519,6 +564,9 @@ func merge(cfg *Config, partial Partial) {
 		if partial.Origin.Mode != nil {
 			cfg.Origin.Mode = *partial.Origin.Mode
 		}
+		if partial.Origin.Edge != nil {
+			cfg.Origin.Edge = *partial.Origin.Edge
+		}
 		if partial.Origin.Provider != nil {
 			cfg.Origin.Provider = *partial.Origin.Provider
 		}
@@ -612,6 +660,9 @@ func mergePartial(dst *Partial, src Partial) {
 		}
 		if src.Origin.Mode != nil {
 			dst.Origin.Mode = src.Origin.Mode
+		}
+		if src.Origin.Edge != nil {
+			dst.Origin.Edge = src.Origin.Edge
 		}
 		if src.Origin.Provider != nil {
 			dst.Origin.Provider = src.Origin.Provider
@@ -821,6 +872,11 @@ func envPartial() (Partial, error) {
 		o.Mode = &mode
 		usedO = true
 	}
+	if value, ok := os.LookupEnv("HITMAKER_EDGE"); ok {
+		edge := Edge(strings.ToLower(value))
+		o.Edge = &edge
+		usedO = true
+	}
 	if value, ok := os.LookupEnv("HITMAKER_PROVIDER"); ok {
 		o.Provider = &value
 		usedO = true
@@ -891,9 +947,11 @@ func legacyMode(value string) Mode {
 		return ModeAuto
 	case "service", "url", "free", "proxy":
 		return ModeProxy
-	case "vercel":
-		return ModeVercel
+	case "vercel", "cloudflare", "cf":
+		// Edge-named legacy values map to the generic spoof mode; Normalize
+		// derives the Edge from the original string where it can.
+		return ModeSpoof
 	default:
-		return ModeNone
+		return ModeOff
 	}
 }

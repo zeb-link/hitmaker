@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 
 type probeOptions struct {
 	Mode     string
+	Edge     string
 	Factory  bool
 	Timeout  time.Duration
 	Bots     string
@@ -37,6 +39,10 @@ func newProbeCommand(root *rootOptions) *cobra.Command {
 			if opts.Mode != "" {
 				cfg.Origin.Mode = config.Mode(opts.Mode)
 			}
+			if opts.Edge != "" {
+				cfg.Origin.Edge = config.Edge(strings.ToLower(opts.Edge))
+			}
+			cfg.Normalize()
 			if err := applyBotFlags(&cfg, opts.Bots, opts.BotRatio, cmd.Flags().Changed("bot-ratio")); err != nil {
 				return err
 			}
@@ -64,7 +70,8 @@ func newProbeCommand(root *rootOptions) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: none, auto, vercel, proxy")
+	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: off, auto, spoof, proxy")
+	cmd.Flags().StringVar(&opts.Edge, "edge", "", "edge to spoof in spoof/auto mode: vercel, cloudflare")
 	cmd.Flags().BoolVar(&opts.Factory, "factory", false, "ignore saved config and use built-in defaults")
 	cmd.Flags().DurationVar(&opts.Timeout, "timeout", 10*time.Second, "request timeout")
 	cmd.Flags().StringVar(&opts.Bots, "bots", "", "send a bot identity: category/name, e.g. GPTBot or ai (see `hitmaker bots`)")
@@ -76,7 +83,11 @@ func newProbeCommand(root *rootOptions) *cobra.Command {
 
 func printProbeResult(cfg config.Config, result simulator.HitResult) {
 	fmt.Printf("%s %s\n", theme.Logo.Render("HITMAKER probe"), result.Target)
-	fmt.Printf("mode=%s timeout=%dms\n", cfg.Origin.Mode, cfg.Traffic.TimeoutMs)
+	origin := string(cfg.Origin.Mode)
+	if cfg.Origin.Mode == config.ModeSpoof || cfg.Origin.Mode == config.ModeAuto {
+		origin += "/" + string(cfg.Origin.Edge)
+	}
+	fmt.Printf("mode=%s timeout=%dms\n", origin, cfg.Traffic.TimeoutMs)
 	if result.Err != "" {
 		fmt.Printf("%s %s\n", theme.Bad.Render("error"), result.Err)
 		return

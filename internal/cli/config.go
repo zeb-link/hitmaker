@@ -135,6 +135,8 @@ func setKey(cfg *config.Config, key, raw string) error {
 		cfg.Entropy.Level = config.EntropyCustom
 	case "origin.mode", "mode":
 		cfg.Origin.Mode = config.Mode(raw)
+	case "origin.edge", "edge":
+		cfg.Origin.Edge = config.Edge(strings.ToLower(strings.TrimSpace(raw)))
 	case "origin.provider", "provider":
 		cfg.Origin.Provider = raw
 	case "origin.iproyalurl", "iproyalurl", "iproyal_url":
@@ -146,5 +148,6 @@ func setKey(cfg *config.Config, key, raw string) error {
 	default:
 		return fmt.Errorf("unknown config key %q", key)
 	}
+	cfg.Normalize()
 	return cfg.Validate()
 }

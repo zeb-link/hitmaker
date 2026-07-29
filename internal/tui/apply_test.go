@@ -21,7 +21,7 @@ func TestConfigModelApplySavesLocallyAndQuits(t *testing.T) {
 	}
 
 	cfg := config.Default()
-	cfg.Origin.Mode = config.ModeVercel
+	cfg.Origin.Mode = config.ModeSpoof
 	var m tea.Model = NewConfigModel(cfg)
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m, _ = m.Update(keyMsg("A")) // open apply preview
@@ -40,7 +40,7 @@ func TestConfigModelApplySavesLocallyAndQuits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("local config not written: %v", err)
 	}
-	if !contains(string(saved), `"mode": "vercel"`) {
-		t.Fatalf("saved config missing vercel mode:\n%s", saved)
+	if !contains(string(saved), `"mode": "spoof"`) {
+		t.Fatalf("saved config missing spoof mode:\n%s", saved)
 	}
 }

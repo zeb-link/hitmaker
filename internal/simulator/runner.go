@@ -52,6 +52,7 @@ type Runner struct {
 }
 
 func New(ctx context.Context, opts Options) (*Runner, error) {
+	opts.Config.Normalize()
 	if err := opts.Config.Validate(); err != nil {
 		return nil, err
 	}
@@ -318,8 +319,11 @@ func (r *Runner) doHit(target string, workerID int, rng *rand.Rand) {
 		req.ContentLength = 0
 	}
 	identity.ApplyBrowserHeaders(req.Header, ident)
-	if r.usesVercelGeoHeaders(req.URL) {
+	switch r.geoEdge(req.URL) {
+	case config.EdgeVercel:
 		identity.ApplyVercelGeoHeaders(req.Header, ident)
+	case config.EdgeCloudflare:
+		identity.ApplyCloudflareGeoHeaders(req.Header, ident)
 	}
 
 	start := time.Now()
@@ -350,14 +354,21 @@ func (r *Runner) doHit(target string, workerID int, rng *rand.Rand) {
 	r.collector.Add(result)
 }
 
-func (r *Runner) usesVercelGeoHeaders(u *url.URL) bool {
+// geoEdge reports which edge provider's geo headers to spoof for u, or an
+// empty Edge to spoof none. Spoof mode always uses the configured Edge. In
+// auto mode, public domains route through the paid proxy (real geo) and only
+// local/internal targets get spoofed geo, again via the configured Edge.
+func (r *Runner) geoEdge(u *url.URL) config.Edge {
 	switch r.cfg.Origin.Mode {
-	case config.ModeVercel:
-		return true
+	case config.ModeSpoof:
+		return r.cfg.Origin.Edge
 	case config.ModeAuto:
-		return !proxy.UsesPaidProxy(u)
+		if !proxy.UsesPaidProxy(u) {
+			return r.cfg.Origin.Edge
+		}
+		return ""
 	default:
-		return false
+		return ""
 	}
 }
 

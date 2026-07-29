@@ -118,6 +118,22 @@ func ApplyVercelGeoHeaders(headers http.Header, ident RequestIdentity) {
 	headers.Set("x-vercel-ip-longitude", ident.Location.Longitude)
 }
 
+// ApplyCloudflareGeoHeaders spoofs a request as if it arrived through the
+// Cloudflare edge. On real Cloudflare, geo is read from request.cf (derived
+// from the connecting IP) and cannot be set by client headers, so the geo lands
+// via the x-hitmaker-* override that the redirect worker honors in dev/non-prod
+// only. The IP still rides cf-connecting-ip, the header the worker reads first.
+func ApplyCloudflareGeoHeaders(headers http.Header, ident RequestIdentity) {
+	headers.Set("cf-connecting-ip", ident.IP)
+	headers.Set("x-forwarded-for", ident.IP)
+	headers.Set("cf-ipcountry", ident.Location.Country)
+	headers.Set("x-hitmaker-country", ident.Location.Country)
+	headers.Set("x-hitmaker-city", ident.Location.City)
+	headers.Set("x-hitmaker-region", ident.Location.Region)
+	headers.Set("x-hitmaker-latitude", ident.Location.Latitude)
+	headers.Set("x-hitmaker-longitude", ident.Location.Longitude)
+}
+
 func WeightedChoice[T any](rng *rand.Rand, items []Weighted[T]) T {
 	if len(items) == 0 {
 		var zero T

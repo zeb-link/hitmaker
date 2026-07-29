@@ -80,7 +80,7 @@ Configuration:
   hitmaker --config`),
 		Example: strings.TrimSpace(`hitmaker https://example.com/a
 hitmaker tui links.txt
-hitmaker run --for 30s --rate 60 --mode vercel https://example.com/a
+hitmaker run --for 30s --rate 60 --mode spoof --edge cloudflare https://example.com/a
 hitmaker run --bots ai --bot-ratio 100 https://example.com/a
 hitmaker bots --json
 hitmaker config edit`),

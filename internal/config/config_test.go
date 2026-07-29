@@ -10,7 +10,7 @@ func TestMergeHonorsZeroValues(t *testing.T) {
 	cfg := Default()
 	zeroInt := 0
 	zeroFloat := 0.0
-	mode := ModeVercel
+	mode := ModeSpoof
 	merge(&cfg, Partial{
 		Traffic: &PartialTraffic{MinPerMin: &zeroInt},
 		Requests: &PartialRequest{
@@ -30,8 +30,39 @@ func TestMergeHonorsZeroValues(t *testing.T) {
 	if cfg.Schedule.IdleOdds != 0 {
 		t.Fatalf("IdleOdds = %v, want 0", cfg.Schedule.IdleOdds)
 	}
-	if cfg.Origin.Mode != ModeVercel {
-		t.Fatalf("Mode = %s, want vercel", cfg.Origin.Mode)
+	if cfg.Origin.Mode != ModeSpoof {
+		t.Fatalf("Mode = %s, want spoof", cfg.Origin.Mode)
+	}
+}
+
+func TestNormalizeFoldsLegacyEdgeModes(t *testing.T) {
+	cases := []struct {
+		name     string
+		mode     Mode
+		edge     Edge
+		wantMode Mode
+		wantEdge Edge
+	}{
+		{"vercel legacy", "vercel", "", ModeSpoof, EdgeVercel},
+		{"cloudflare legacy", "cloudflare", "", ModeSpoof, EdgeCloudflare},
+		{"cf alias", "cf", "", ModeSpoof, EdgeCloudflare},
+		{"explicit edge wins over legacy default", "vercel", EdgeCloudflare, ModeSpoof, EdgeCloudflare},
+		{"empty edge defaults to cloudflare", ModeSpoof, "", ModeSpoof, EdgeCloudflare},
+		{"proxy keeps mode, still gets default edge", ModeProxy, "", ModeProxy, EdgeCloudflare},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.Origin.Mode = tc.mode
+			cfg.Origin.Edge = tc.edge
+			cfg.Normalize()
+			if cfg.Origin.Mode != tc.wantMode || cfg.Origin.Edge != tc.wantEdge {
+				t.Fatalf("Normalize() = (%q, %q), want (%q, %q)", cfg.Origin.Mode, cfg.Origin.Edge, tc.wantMode, tc.wantEdge)
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("normalized config failed validation: %v", err)
+			}
+		})
 	}
 }
 

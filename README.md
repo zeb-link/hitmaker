@@ -59,15 +59,15 @@ hitmaker links.txt
 Headless CLI:
 
 ```bash
-hitmaker run --for 10m --rate 5-20 --mode vercel https://example.com/a
+hitmaker run --for 10m --rate 5-20 --mode spoof --edge cloudflare https://example.com/a
 hitmaker run --json --targets links.txt --for 30s --rate 60
 ```
 
 Fast diagnostics:
 
 ```bash
-hitmaker probe --factory --mode none https://example.com/a
-hitmaker run --factory --for 10s --rate 60 --mode none https://example.com/a
+hitmaker probe --factory --mode off https://example.com/a
+hitmaker run --factory --for 10s --rate 60 --mode off https://example.com/a
 ```
 
 Use `--factory` when you want to ignore saved `~/.hitmaker/config.json` and
@@ -108,7 +108,8 @@ status instead. `probe` prints the status of the hop it stops on.
 | `--for 10m` | Run for a duration, then exit. Omit to run until Ctrl-C. |
 | `--rate N` / `--rate MIN-MAX` | Hits per minute **per worker** (equals per-target at the default 1 worker). |
 | `--concurrent N` | Workers per target. |
-| `--mode none\|auto\|vercel\|proxy` | Origin mode (see below). |
+| `--mode off\|auto\|spoof\|proxy` | Origin mode (see below). |
+| `--edge vercel\|cloudflare` | Spoofed origin — which edge a direct (spoof) request mimics. Applies in `spoof` and `auto`. |
 | `--bot-ratio 0-100` | Percent of traffic that is bots. **Same knob** as config `unknownRatio`. |
 | `--bots <spec>` | Which bots (see [Bots & AI crawlers](#bots--ai-crawlers)). |
 | `--device-ratio 0-100` | Of the human hits, percent desktop vs mobile. |
@@ -134,14 +135,97 @@ fixtures.
 ## Modes
 
 Origin mode controls only network origin and geo behavior. User-Agent, referer,
-language, and method still rotate in every mode.
+language, and method still rotate in every mode. Two settings work together:
+**mode** decides routing (direct vs paid proxy) and **edge** decides which edge
+provider's geo/IP headers a direct request carries.
 
 | Mode | Behavior |
 | --- | --- |
-| `none` | Direct requests, no geo/IP spoofing headers. |
-| `auto` | Public domains with valid TLDs route through the configured paid proxy provider; localhost, `.local`, IP literals, and internal/reserved names stay direct with Vercel geo headers. |
-| `vercel` | Direct requests plus `x-forwarded-for`, `x-real-ip`, and `x-vercel-ip-*` headers. |
+| `off` | Direct requests, no geo/IP spoofing headers. |
+| `auto` | Public domains with valid TLDs route through the configured paid proxy provider; localhost, `.local`, IP literals, and internal/reserved names stay direct with the configured edge's geo headers. |
+| `spoof` | Direct requests carrying the configured edge's geo/IP headers. |
 | `proxy` | Routes through a paid proxy provider; geo spoofing headers are disabled. |
+
+The **edge** setting (`--edge`, config `origin.edge`) is consulted by `spoof`
+and by `auto`'s local/internal branch:
+
+| Edge | Headers | Notes |
+| --- | --- | --- |
+| `vercel` | `x-forwarded-for`, `x-real-ip`, `x-vercel-ip-*` | Vercel passes geo as request headers, so the origin reads them directly. |
+| `cloudflare` | `cf-connecting-ip`, `cf-ipcountry`, `x-hitmaker-*` | Cloudflare derives geo from `request.cf` (the real connecting IP) — a client can't set it. Your service reads the `x-hitmaker-*` geo override only in dev/non-prod, so spoofed geo registers against the dev/preview edge, never production (see below). |
+
+`cloudflare` is the default edge (the live provider). Legacy `--mode vercel` /
+`--mode cloudflare` still work — they fold to `spoof` with the matching edge.
+
+### Testing Cloudflare spoofing locally
+
+Vercel passes geolocation as ordinary request headers, so a direct request that
+carries `x-vercel-ip-*` is enough — the origin reads what it's given. **Cloudflare
+does not work this way.** Behind Cloudflare, geo lives on `request.cf`, which the
+edge fills in from the *real* connecting IP, and inbound `cf-*` headers are
+stripped at the edge. That means geolocation **cannot be spoofed with headers
+against production** — no matter what a client sends, `request.cf` wins.
+
+To make Cloudflare-style traffic testable, Hitmaker's `cloudflare` edge sends a
+side-channel that your own service can choose to honor **in non-production only**:
+
+| Header | Carries |
+| --- | --- |
+| `cf-connecting-ip` | Fake client IP (the header a Worker normally reads for IP). |
+| `x-forwarded-for` | Same IP, as a fallback. |
+| `cf-ipcountry` | Country code. |
+| `x-hitmaker-country` | Country code. |
+| `x-hitmaker-city` | City, URL-encoded (e.g. `S%C3%A3o%20Paulo`). |
+| `x-hitmaker-region` | Region / subdivision. |
+| `x-hitmaker-latitude` | Latitude. |
+| `x-hitmaker-longitude` | Longitude. |
+
+To wire it up on your side:
+
+1. **Add a dev-gated override in your edge handler.** Where you currently read geo
+   from `request.cf`, first check a gate that is *only ever true off production* —
+   e.g. `NODE_ENV !== "production"`, or a dedicated flag/binding you set on your dev
+   worker. If the gate is open **and** the spoof headers are present, read geo from
+   the `x-hitmaker-*` headers instead; otherwise fall back to `request.cf`. Gate it
+   so a real visitor can never forge their own location:
+
+   ```ts
+   // Real geo comes from request.cf; the override exists only for local/dev testing.
+   const allowSpoof = env.NODE_ENV !== "production"; // or a dedicated dev flag/binding
+   const cf = request.cf;
+
+   let country   = cf?.country;
+   let city      = cf?.city;
+   let region    = cf?.region;
+   let latitude  = cf?.latitude;
+   let longitude = cf?.longitude;
+
+   if (allowSpoof && request.headers.get("x-hitmaker-country")) {
+     country   = request.headers.get("x-hitmaker-country")   ?? country;
+     city      = decodeURIComponent(request.headers.get("x-hitmaker-city") ?? "") || city;
+     region    = request.headers.get("x-hitmaker-region")    ?? region;
+     latitude  = request.headers.get("x-hitmaker-latitude")  ?? latitude;
+     longitude = request.headers.get("x-hitmaker-longitude") ?? longitude;
+   }
+   ```
+
+   The IP needs no gate: your Worker already reads `cf-connecting-ip`, which Hitmaker
+   sets — and which Cloudflare overwrites in production anyway.
+
+2. **Run your service locally or on a dev deployment.** `wrangler dev`, or a worker
+   deployed to a non-production environment, is where the gate is open. Never point
+   this at production — the override is deliberately dead there.
+
+3. **Send spoofed traffic at it** with the `cloudflare` edge:
+
+   ```bash
+   hitmaker probe --mode spoof --edge cloudflare http://127.0.0.1:8787/your-path
+   hitmaker run --for 2m --rate 10 --mode spoof --edge cloudflare http://127.0.0.1:8787/your-path
+   ```
+
+   The probe header line reads `mode=spoof/cloudflare`. Confirm the faked country/city
+   show up wherever your service records geo (logs, analytics, a debug endpoint) rather
+   than your own real location.
 
 Proxy support is an adapter interface; the one adapter so far is `iproyal`:
 
@@ -257,7 +341,8 @@ Config files are written with mode `0600`; the global config directory uses
     "maxIdle": 15
   },
   "origin": {
-    "mode": "none"
+    "mode": "off",
+    "edge": "cloudflare"
   }
 }
 ```
@@ -269,7 +354,8 @@ hitmaker config print
 hitmaker config edit
 hitmaker --config
 hitmaker config set min_per_min 5
-hitmaker config set mode vercel
+hitmaker config set mode spoof
+hitmaker config set edge cloudflare
 hitmaker config reset
 ```
 
@@ -277,8 +363,8 @@ If traffic looks dead, start here:
 
 ```bash
 hitmaker config print
-hitmaker probe --factory --mode none https://your-target.example/path
-hitmaker run --factory --for 10s --rate 60 --mode none https://your-target.example/path
+hitmaker probe --factory --mode off https://your-target.example/path
+hitmaker run --factory --for 10s --rate 60 --mode off https://your-target.example/path
 ```
 
 If those work but a normal run does not, the problem is probably saved config

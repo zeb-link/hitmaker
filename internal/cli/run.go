@@ -22,6 +22,7 @@ type runOptions struct {
 	For         string
 	Rate        string
 	Mode        string
+	Edge        string
 	Concurrent  int
 	DeviceRatio int
 	Interval    time.Duration
@@ -64,6 +65,10 @@ func newRunCommand(root *rootOptions) *cobra.Command {
 			if opts.Mode != "" {
 				cfg.Origin.Mode = config.Mode(opts.Mode)
 			}
+			if opts.Edge != "" {
+				cfg.Origin.Edge = config.Edge(strings.ToLower(opts.Edge))
+			}
+			cfg.Normalize()
 			if err := applyBotFlags(&cfg, opts.Bots, opts.BotRatio, cmd.Flags().Changed("bot-ratio")); err != nil {
 				return err
 			}
@@ -77,7 +82,8 @@ func newRunCommand(root *rootOptions) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&opts.Targets, "targets", "t", nil, "target URLs or files")
 	cmd.Flags().StringVar(&opts.For, "for", "", "run duration, e.g. 30s, 10m, 1h (omit to run until Ctrl-C)")
 	cmd.Flags().StringVar(&opts.Rate, "rate", "", "hits per minute, per worker, as N or MIN-MAX")
-	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: none, auto, vercel, proxy")
+	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: off, auto, spoof, proxy")
+	cmd.Flags().StringVar(&opts.Edge, "edge", "", "edge to spoof in spoof/auto mode: vercel, cloudflare")
 	cmd.Flags().IntVarP(&opts.Concurrent, "concurrent", "c", 0, "workers per target")
 	cmd.Flags().IntVar(&opts.DeviceRatio, "device-ratio", 0, "percent of human hits that are desktop vs mobile (0-100)")
 	cmd.Flags().DurationVar(&opts.Interval, "interval", time.Second, "stats print interval")
@@ -169,9 +175,13 @@ func runHeadless(root *rootOptions, cfg config.Config, targets []string, runFor 
 }
 
 func printRunConfigHint(cfg config.Config) {
+	origin := string(cfg.Origin.Mode)
+	if cfg.Origin.Mode == config.ModeSpoof || cfg.Origin.Mode == config.ModeAuto {
+		origin += "/" + string(cfg.Origin.Edge)
+	}
 	fmt.Printf("%s mode=%s rate=%d-%d/min concurrent=%d timeout=%dms\n",
 		theme.Subtle.Render("config"),
-		cfg.Origin.Mode,
+		origin,
 		cfg.Traffic.MinPerMin,
 		cfg.Traffic.MaxPerMin,
 		cfg.Traffic.Concurrent,
@@ -181,7 +191,7 @@ func printRunConfigHint(cfg config.Config) {
 		fmt.Printf("%s saved config is using proxy mode; use --mode none or --factory for a direct smoke test\n", theme.Warn.Render("warning"))
 	}
 	if cfg.Origin.Mode == config.ModeAuto {
-		fmt.Printf("%s auto mode routes public domains through the proxy provider and local/internal targets through Vercel geo headers\n", theme.Subtle.Render("origin"))
+		fmt.Printf("%s auto mode routes public domains through the proxy provider and local/internal targets through %s geo headers\n", theme.Subtle.Render("origin"), cfg.Origin.Edge)
 	}
 }
 

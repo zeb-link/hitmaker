@@ -99,6 +99,7 @@ func newConfigEditor(cfg config.Config) configEditor {
 			{group: "ENTROPY", label: "Breakout intensity", kind: "slider", key: "entBreakout", min: 0, max: 100, step: 5},
 			{group: "ENTROPY", label: "Viral links %", kind: "slider", key: "entViral", min: 0, max: 20, step: 1},
 			{group: "ORIGIN", label: "Origin mode", kind: "select", key: "mode"},
+			{group: "ORIGIN", label: "Spoofed origin", kind: "select", key: "edge"},
 			{group: "ORIGIN", label: "Proxy service", kind: "text", key: "provider"},
 			{group: "ORIGIN", label: "IPRoyal endpoint", kind: "secret", key: "iproyal"},
 			{group: "URL PARAMS", label: "Rules & payloads", kind: "open", key: "params"},
@@ -392,6 +393,8 @@ func (e configEditor) currentSelectValue(key string) string {
 		return e.cfg.Requests.Method
 	case "mode":
 		return string(e.cfg.Origin.Mode)
+	case "edge":
+		return string(e.cfg.Origin.Edge)
 	case "entropy":
 		return string(e.cfg.Entropy.Level)
 	case "botpool":
@@ -419,10 +422,15 @@ func (e configEditor) selectOptions(key string) []selectOption {
 		}
 	case "mode":
 		return []selectOption{
-			{label: "None", value: string(config.ModeNone)},
+			{label: "Off", value: string(config.ModeOff)},
 			{label: "Auto", value: string(config.ModeAuto)},
-			{label: "Vercel", value: string(config.ModeVercel)},
+			{label: "Spoof", value: string(config.ModeSpoof)},
 			{label: "Proxy", value: string(config.ModeProxy)},
+		}
+	case "edge":
+		return []selectOption{
+			{label: "Vercel", value: string(config.EdgeVercel)},
+			{label: "Cloudflare", value: string(config.EdgeCloudflare)},
 		}
 	case "entropy":
 		options := []selectOption{
@@ -500,10 +508,12 @@ func (e *configEditor) adjust(dir int) {
 		e.beginCustomEntropy()
 		e.cfg.Entropy.ViralPercent = clampInt(e.cfg.Entropy.ViralPercent+dir*int(field.step), 0, 100)
 	case "mode":
-		e.cfg.Origin.Mode = config.Mode(rotate(string(e.cfg.Origin.Mode), []string{"none", "auto", "vercel", "proxy"}, dir))
+		e.cfg.Origin.Mode = config.Mode(rotate(string(e.cfg.Origin.Mode), []string{"off", "auto", "spoof", "proxy"}, dir))
 		if (e.cfg.Origin.Mode == config.ModeAuto || e.cfg.Origin.Mode == config.ModeProxy) && e.cfg.Origin.Provider == "" {
 			e.cfg.Origin.Provider = "iproyal"
 		}
+	case "edge":
+		e.cfg.Origin.Edge = config.Edge(rotate(string(e.cfg.Origin.Edge), []string{"vercel", "cloudflare"}, dir))
 	case "botpool":
 		idx := botPoolIndex(e.cfg.Requests.Bots)
 		if idx < 0 {
@@ -575,6 +585,8 @@ func (e *configEditor) setRaw(key, value string) {
 		e.cfg.Entropy.ViralPercent = clampInt(atoi(value, e.cfg.Entropy.ViralPercent), 0, 100)
 	case "mode":
 		e.cfg.Origin.Mode = config.Mode(value)
+	case "edge":
+		e.cfg.Origin.Edge = config.Edge(value)
 	case "provider":
 		e.cfg.Origin.Provider = value
 	case "iproyal":
@@ -594,6 +606,9 @@ func (e *configEditor) setRaw(key, value string) {
 func (e configEditor) fieldDisabled(field editorField) bool {
 	if field.key == "provider" || field.key == "iproyal" {
 		return e.cfg.Origin.Mode != config.ModeProxy && e.cfg.Origin.Mode != config.ModeAuto
+	}
+	if field.key == "edge" {
+		return e.cfg.Origin.Mode != config.ModeSpoof && e.cfg.Origin.Mode != config.ModeAuto
 	}
 	return false
 }
@@ -826,7 +841,11 @@ func (e configEditor) fieldGuideView(width, height int) string {
 		}
 	}
 	if e.fieldDisabled(field) {
-		lines = append(lines, "", theme.Warn.Render("Disabled"), theme.Subtle.Render("Enable Auto or Proxy service origin mode to edit this field."))
+		hint := "Enable Auto or Proxy service origin mode to edit this field."
+		if field.key == "edge" {
+			hint = "Enable Spoof or Auto origin mode to edit this field."
+		}
+		lines = append(lines, "", theme.Warn.Render("Disabled"), theme.Subtle.Render(hint))
 	}
 	maxLines := max(4, height-2)
 	if len(lines) > maxLines {
@@ -854,7 +873,7 @@ func (e configEditor) fieldInstructions(field editorField) string {
 		}
 		return "Type numbers to replace the value immediately. Backspace edits. Left/right nudges."
 	case "select":
-		if field.key == "mode" {
+		if field.key == "mode" || field.key == "edge" {
 			return "Left/right changes the option. Enter moves to the next row."
 		}
 		if field.key == "entropy" {
@@ -936,11 +955,16 @@ func (e configEditor) fieldGuide(field editorField) fieldGuide {
 	case "entViral":
 		return fieldGuide{summary: "Share of links that become breakout 'viral' links.", details: []string{"Viral links hug the top of the rate range and rarely go idle.", "Set to 0 for no forced breakouts (the tail can still produce busy links)."}}
 	case "mode":
-		return fieldGuide{summary: "Controls where requests appear to come from. Identity, bot selection, method, and URL params still rotate in every mode.", details: []string{
-			"None: direct requests with no geo/IP spoofing headers.",
-			"Auto: public domains with valid TLDs use the paid proxy; localhost, .local, IP literals, and internal names stay direct with Vercel geo headers.",
-			"Vercel: direct requests with x-forwarded-for, x-real-ip, and x-vercel-ip-* geo headers.",
+		return fieldGuide{summary: "Controls where requests appear to come from. Identity, bot selection, method, and URL params still rotate in every mode. Spoofed origin picks which edge a direct request mimics.", details: []string{
+			"Off: direct requests with no geo/IP spoofing headers.",
+			"Auto: public domains with valid TLDs use the paid proxy; localhost, .local, IP literals, and internal names stay direct with the chosen origin's geo headers.",
+			"Spoof: direct requests carrying the chosen origin's geo/IP headers (see Spoofed origin).",
 			"Proxy: every request routes through the configured paid proxy provider; geo spoofing headers are disabled.",
+		}}
+	case "edge":
+		return fieldGuide{summary: "Which edge provider a direct (spoof) request mimics. Applies in Spoof mode and Auto mode's local/internal branch; ignored by Off and Proxy.", details: []string{
+			"Vercel: x-forwarded-for, x-real-ip, and x-vercel-ip-* geo headers the origin reads directly.",
+			"Cloudflare: cf-connecting-ip and cf-ipcountry, plus x-hitmaker-* geo headers your service honors in dev/non-prod (real request.cf can't be spoofed by a client).",
 		}}
 	case "provider":
 		return fieldGuide{summary: "Paid proxy provider used by Proxy mode and by Auto mode for public-domain targets.", details: []string{"Currently supported provider: iproyal.", "Credentials are redacted in config output."}}
@@ -1059,7 +1083,7 @@ func (e configEditor) previewLines(contentWidth int) []string {
 		row("Schedule", fmt.Sprintf("active %d–%dm · idle %.0f%% for %d–%dm",
 			cfg.Schedule.MinActive, cfg.Schedule.MaxActive, cfg.Schedule.IdleOdds*100, cfg.Schedule.MinIdle, cfg.Schedule.MaxIdle)),
 		row("Entropy", entropy),
-		row("Origin", modeLabel(cfg.Origin.Mode)),
+		row("Origin", originSummary(cfg.Origin)),
 		row("Params", fmt.Sprintf("%d rule(s) · %d payload(s)", len(cfg.Requests.URLParams), countPayloads(cfg.Requests.URLParams))),
 	}
 }
@@ -1122,6 +1146,9 @@ func (e configEditor) displayValue(field editorField) string {
 	case "slider":
 		return slider(e.numberValue(field.key), field.min, field.max)
 	case "select":
+		if e.fieldDisabled(field) {
+			return theme.Subtle.Render(e.selectLabel(field.key, e.selectDisplayValue(field.key)))
+		}
 		if field.key == "mode" {
 			return radioSegment(e.selectDisplayValue(field.key), e.selectOptions(field.key))
 		}
@@ -1155,6 +1182,9 @@ func (e configEditor) displayValuePlain(field editorField) string {
 	case "slider":
 		return sliderPlain(e.numberValue(field.key), field.min, field.max)
 	case "select":
+		if e.fieldDisabled(field) {
+			return e.selectLabel(field.key, e.currentSelectValue(field.key))
+		}
 		if field.key == "mode" {
 			return radioSegmentPlain(e.currentSelectValue(field.key), e.selectOptions(field.key))
 		}
@@ -1322,33 +1352,29 @@ func radioSegment(active string, options []selectOption) string {
 	return strings.Join(parts, " ")
 }
 
-func modeSegment(active config.Mode) string {
-	values := []config.Mode{config.ModeNone, config.ModeAuto, config.ModeVercel, config.ModeProxy}
-	parts := make([]string, 0, len(values))
-	for _, value := range values {
-		label := modeLabel(value)
-		if value == active {
-			parts = append(parts, theme.PillHot.Render(label))
-		} else {
-			parts = append(parts, theme.Pill.Render(label))
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
 func modeLabel(mode config.Mode) string {
 	switch mode {
-	case config.ModeNone:
-		return "None"
+	case config.ModeOff:
+		return "Off"
 	case config.ModeAuto:
 		return "Auto"
-	case config.ModeVercel:
-		return "Vercel geo headers (spoofing)"
+	case config.ModeSpoof:
+		return "Spoof (edge geo headers)"
 	case config.ModeProxy:
 		return "Proxy service"
 	default:
 		return string(mode)
 	}
+}
+
+// originSummary is the one-line Origin value for the config summary: the mode,
+// plus the edge it spoofs when that edge is in play (Spoof or Auto).
+func originSummary(o config.OriginConfig) string {
+	label := modeLabel(o.Mode)
+	if o.Mode == config.ModeSpoof || o.Mode == config.ModeAuto {
+		return fmt.Sprintf("%s · %s", label, o.Edge)
+	}
+	return label
 }
 
 // botPoolPresets are the one-key bot-pool choices offered in the editor. spec is
@@ -1449,6 +1475,10 @@ func keyLabel(key string) string {
 		return "breakout intensity"
 	case "entViral":
 		return "viral links"
+	case "mode":
+		return "origin mode"
+	case "edge":
+		return "spoofed origin"
 	default:
 		return key
 	}

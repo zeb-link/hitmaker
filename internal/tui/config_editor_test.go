@@ -166,7 +166,7 @@ func TestConfigEditorApplyShowsPreviewBeforeAction(t *testing.T) {
 
 func TestConfigEditorDimsProxyFieldsWhenNotProxyMode(t *testing.T) {
 	editor := newConfigEditor(config.Default())
-	editor.cfg.Origin.Mode = config.ModeNone
+	editor.cfg.Origin.Mode = config.ModeOff
 	for i, field := range editor.fields {
 		if field.key == "provider" {
 			editor.focus = i
