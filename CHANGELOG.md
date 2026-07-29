@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.5.0 - 2026-07-30
+
+Origin modes now separate how a request is routed from which edge it claims to
+have come through. Routing stays with the mode; a new `edge` setting picks the
+header set.
+
+- `off` (was `none`) — no origin spoofing at all.
+- `spoof` (was `vercel`) — a direct request carrying the edge's geo and IP headers.
+- `auto` — public domains route through the paid proxy provider; local and
+  internal targets get spoofed headers instead.
+- `proxy` — unchanged.
+
+`edge` is `vercel` or `cloudflare` and defaults to cloudflare. Cloudflare
+spoofing puts the client IP on `cf-connecting-ip` and the country on
+`cf-ipcountry`. Real Cloudflare derives the rest of the location from the
+connecting IP and ignores client headers for it, so that part travels as
+`x-hitmaker-*` headers, which a receiving service is expected to honour outside
+production only.
+
+Set it with `--edge` on `run` and `probe`, with `config set edge`, with
+`HITMAKER_EDGE`, or in the config editor. The `run` and `probe` headers now
+print the pair, e.g. `mode=spoof/cloudflare`.
+
+Older names keep working. Saved configs, env vars, and flags that say `none`,
+`vercel`, `cloudflare`, or `cf` are folded into the current names when loaded —
+`vercel` becomes `spoof` on the Vercel edge, `none` becomes `off`.
+
 ## 2.4.0 - 2026-07-20
 
 Light mode. Yes, some of you run your terminals with a white background, and no,
