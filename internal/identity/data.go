@@ -40,6 +40,34 @@ var Referers = []string{
 	"https://weibo.com/",
 }
 
+// RegionNames maps each location's ISO 3166-2 region ("US-OR") to the
+// English subdivision NAME a real edge reports alongside the code (Cloudflare's
+// request.cf.region). Cloudflare mode sends both, so spoofed clicks store the
+// same pair production clicks do. Every Locations entry must have one.
+var RegionNames = map[string]string{
+	"AR-C": "Buenos Aires F.D.", "AU-NSW": "New South Wales", "AU-VIC": "Victoria",
+	"BR-RJ": "Rio de Janeiro", "BR-SP": "São Paulo",
+	"CA-BC": "British Columbia", "CA-ON": "Ontario", "CA-QC": "Quebec",
+	"DE-BE": "Land Berlin", "DE-BY": "Bavaria", "DE-HE": "Hesse", "DE-HH": "Hamburg",
+	"DK-82": "Central Jutland", "DK-84": "Capital Region",
+	"ES-CT": "Catalonia", "ES-MD": "Madrid",
+	"FR-ARA": "Auvergne-Rhône-Alpes", "FR-IDF": "Île-de-France", "FR-PAC": "Provence-Alpes-Côte d'Azur",
+	"GB-ENG": "England", "GB-SCT": "Scotland",
+	"IN-DL": "National Capital Territory of Delhi", "IN-KA": "Karnataka", "IN-MH": "Maharashtra",
+	"IT-25": "Lombardy", "IT-62": "Lazio",
+	"JP-13": "Tokyo", "JP-27": "Ōsaka",
+	"KR-11": "Seoul",
+	"MX-CMX": "Mexico City",
+	"NL-NH": "North Holland", "NL-ZH": "South Holland",
+	"NO-03": "Oslo",
+	"PL-MZ": "Mazovia",
+	"SE-AB": "Stockholm", "SE-O": "Västra Götaland",
+	"SG-01": "Central Singapore",
+	"US-CA": "California", "US-CO": "Colorado", "US-FL": "Florida", "US-GA": "Georgia",
+	"US-IL": "Illinois", "US-NY": "New York", "US-OR": "Oregon", "US-TX": "Texas", "US-WA": "Washington",
+	"ZA-GP": "Gauteng",
+}
+
 var Locations = []Location{
 	// North America
 	{Country: "US", City: "The%20Dalles", Region: "OR", Latitude: "45.5946", Longitude: "-121.1787"},
@@ -71,8 +99,8 @@ var Locations = []Location{
 	{Country: "NL", City: "Rotterdam", Region: "ZH", Latitude: "51.9244", Longitude: "4.4777"},
 	{Country: "ES", City: "Madrid", Region: "MD", Latitude: "40.4168", Longitude: "-3.7038"},
 	{Country: "ES", City: "Barcelona", Region: "CT", Latitude: "41.3851", Longitude: "2.1734"},
-	{Country: "IT", City: "Rome", Region: "LZ", Latitude: "41.9028", Longitude: "12.4964"},
-	{Country: "IT", City: "Milan", Region: "LO", Latitude: "45.4642", Longitude: "9.1900"},
+	{Country: "IT", City: "Rome", Region: "62", Latitude: "41.9028", Longitude: "12.4964"},
+	{Country: "IT", City: "Milan", Region: "25", Latitude: "45.4642", Longitude: "9.1900"},
 	{Country: "SE", City: "Stockholm", Region: "AB", Latitude: "59.3293", Longitude: "18.0686"},
 	{Country: "SE", City: "Gothenburg", Region: "O", Latitude: "57.7089", Longitude: "11.9746"},
 	{Country: "NO", City: "Oslo", Region: "03", Latitude: "59.9139", Longitude: "10.7522"},

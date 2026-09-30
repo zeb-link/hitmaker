@@ -3,9 +3,30 @@ package identity
 import (
 	"math/rand"
 	"net"
+	"net/http"
 	"strings"
 	"testing"
 )
+
+func TestEveryLocationHasARegionName(t *testing.T) {
+	for _, loc := range Locations {
+		if _, ok := RegionNames[loc.Country+"-"+loc.Region]; !ok {
+			t.Errorf("%s/%s: region %s-%s has no RegionNames entry", loc.Country, loc.City, loc.Country, loc.Region)
+		}
+	}
+}
+
+func TestCloudflareHeadersCarryRegionNameAndCode(t *testing.T) {
+	headers := make(http.Header)
+	loc := Location{Country: "US", City: "Austin", Region: "TX"}
+	ApplyCloudflareGeoHeaders(headers, RequestIdentity{Location: loc})
+	if got := headers.Get("x-hitmaker-region"); got != "Texas" {
+		t.Errorf("x-hitmaker-region = %q, want Texas", got)
+	}
+	if got := headers.Get("x-hitmaker-region-code"); got != "TX" {
+		t.Errorf("x-hitmaker-region-code = %q, want TX", got)
+	}
+}
 
 func TestWeightedChoice(t *testing.T) {
 	rng := rand.New(rand.NewSource(4))

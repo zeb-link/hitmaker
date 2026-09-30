@@ -176,7 +176,8 @@ side-channel that your own service can choose to honor **in non-production only*
 | `cf-ipcountry` | Country code. |
 | `x-hitmaker-country` | Country code. |
 | `x-hitmaker-city` | City, URL-encoded (e.g. `S%C3%A3o%20Paulo`). |
-| `x-hitmaker-region` | Region / subdivision. |
+| `x-hitmaker-region` | Region / subdivision name (e.g. `Texas`), like `request.cf.region`. |
+| `x-hitmaker-region-code` | Region's ISO 3166-2 code without the country prefix (e.g. `TX`), like `request.cf.regionCode`. |
 | `x-hitmaker-latitude` | Latitude. |
 | `x-hitmaker-longitude` | Longitude. |
 
@@ -197,6 +198,7 @@ To wire it up on your side:
    let country   = cf?.country;
    let city      = cf?.city;
    let region    = cf?.region;
+   let regionCode = cf?.regionCode;
    let latitude  = cf?.latitude;
    let longitude = cf?.longitude;
 
@@ -204,6 +206,7 @@ To wire it up on your side:
      country   = request.headers.get("x-hitmaker-country")   ?? country;
      city      = decodeURIComponent(request.headers.get("x-hitmaker-city") ?? "") || city;
      region    = request.headers.get("x-hitmaker-region")    ?? region;
+     regionCode = request.headers.get("x-hitmaker-region-code") ?? undefined;
      latitude  = request.headers.get("x-hitmaker-latitude")  ?? latitude;
      longitude = request.headers.get("x-hitmaker-longitude") ?? longitude;
    }

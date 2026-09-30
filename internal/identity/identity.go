@@ -129,9 +129,22 @@ func ApplyCloudflareGeoHeaders(headers http.Header, ident RequestIdentity) {
 	headers.Set("cf-ipcountry", ident.Location.Country)
 	headers.Set("x-hitmaker-country", ident.Location.Country)
 	headers.Set("x-hitmaker-city", ident.Location.City)
-	headers.Set("x-hitmaker-region", ident.Location.Region)
+	// request.cf carries the region twice: its NAME (cf.region) and its
+	// ISO 3166-2 code without the country prefix (cf.regionCode). Location
+	// stores the code, so the name comes from RegionNames.
+	headers.Set("x-hitmaker-region", RegionName(ident.Location))
+	headers.Set("x-hitmaker-region-code", ident.Location.Region)
 	headers.Set("x-hitmaker-latitude", ident.Location.Latitude)
 	headers.Set("x-hitmaker-longitude", ident.Location.Longitude)
+}
+
+// RegionName is the location's region name as an edge reports it, falling
+// back to the bare code for a location missing from RegionNames.
+func RegionName(loc Location) string {
+	if name, ok := RegionNames[loc.Country+"-"+loc.Region]; ok {
+		return name
+	}
+	return loc.Region
 }
 
 func WeightedChoice[T any](rng *rand.Rand, items []Weighted[T]) T {
