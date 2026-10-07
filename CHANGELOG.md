@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.5.1 - 2026-10-07
+
+- Cloudflare spoofing now sends the region the way `request.cf` does:
+  `x-hitmaker-region` carries the subdivision name (e.g. `Texas`) and the new
+  `x-hitmaker-region-code` carries its ISO 3166-2 code (e.g. `TX`). Every
+  location now has a name, and Rome and Milan use their real ISO codes.
+- Built with Go 1.26.8 and updated dependencies (Bubble Tea, Bubbles,
+  Lip Gloss, `golang.org/x/net`). `govulncheck ./...` reports no
+  vulnerabilities.
+
 ## 2.5.0 - 2026-07-30
 
 Origin modes now separate how a request is routed from which edge it claims to
