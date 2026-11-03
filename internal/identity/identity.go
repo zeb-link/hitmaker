@@ -56,14 +56,25 @@ func (g *Generator) UseBots(filter BotFilter) {
 	g.botPool = BotPool(filter)
 }
 
-func (g *Generator) Next(deviceRatio, unknownRatio int, uniqueIPProb float64) RequestIdentity {
+// DeviceMix is how a hit's user agent is drawn, all in percent: Bots of all
+// hits come from the bot pool; of the rest (people), UnknownDevice come from
+// browsers that can't be placed, and the remainder split Desktop vs mobile.
+type DeviceMix struct {
+	Bots          int
+	UnknownDevice int
+	Desktop       int
+}
+
+func (g *Generator) Next(mix DeviceMix, uniqueIPProb float64) RequestIdentity {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	var ua string
-	if g.rng.Float64()*100 < float64(unknownRatio) {
+	if g.rng.Float64()*100 < float64(mix.Bots) {
 		ua = WeightedChoice(g.rng, g.botPool)
-	} else if g.rng.Float64()*100 < float64(deviceRatio) {
+	} else if g.rng.Float64()*100 < float64(mix.UnknownDevice) {
+		ua = choice(g.rng, UnknownDeviceUserAgents)
+	} else if g.rng.Float64()*100 < float64(mix.Desktop) {
 		ua = choice(g.rng, DesktopUserAgents)
 	} else {
 		ua = choice(g.rng, MobileUserAgents)

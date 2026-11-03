@@ -3,7 +3,6 @@ package proxy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -33,9 +32,13 @@ type Transport interface {
 	CloseIdleConnections()
 }
 
+// DefaultRegistry holds one adapter per entry in config.ProxyProviders. To add a
+// provider, add it there (name, label, example URL) and register its adapter
+// here; TestRegistryMatchesConfigProviders keeps the two lists in step.
 func DefaultRegistry() Registry {
 	r := Registry{providers: map[string]Provider{}}
 	r.Register(IPRoyal{})
+	r.Register(Evomi{})
 	return r
 }
 
@@ -73,15 +76,12 @@ func (r Registry) BuildTransportForTargets(ctx context.Context, origin config.Or
 }
 
 func (r Registry) buildProxyTransport(ctx context.Context, origin config.OriginConfig) (*http.Transport, error) {
-	providerName := origin.Provider
-	if providerName == "" {
-		providerName = "iproyal"
-	}
+	providerName := origin.ProviderName()
 	provider, ok := r.Provider(providerName)
 	if !ok {
 		return nil, fmt.Errorf("unknown proxy provider %q", providerName)
 	}
-	cfg := ProviderConfig(origin.ProviderConfig)
+	cfg := ProviderConfig(origin.ActiveProviderSettings())
 	if err := provider.Validate(cfg); err != nil {
 		return nil, err
 	}
@@ -190,7 +190,8 @@ func BaseTransport() *http.Transport {
 // rotatingProxyTransport is BaseTransport with connection reuse turned OFF. Use
 // it from any provider whose gateway assigns a fresh exit IP PER NEW TCP
 // CONNECTION (rotating residential/mobile endpoints — IPRoyal's geo gateway,
-// most Bright Data / Oxylabs rotating ports, etc.). With keep-alive on, the
+// Evomi without a session parameter, most Bright Data / Oxylabs rotating
+// ports, etc.). With keep-alive on, the
 // shared worker client pins each connection to the exit it first dialed, so a
 // whole run collapses onto a handful of sticky IPs and the geo looks stuck to a
 // couple of countries. Disabling keep-alive forces a fresh dial per request, so
@@ -203,41 +204,81 @@ func rotatingProxyTransport() *http.Transport {
 	return transport
 }
 
+// validateGatewayURL checks the one setting every current adapter needs: a
+// proxy gateway URL with a supported scheme and a host. Targeting options
+// (country, session, ...) ride inside the URL's credentials in each provider's
+// own syntax, so they pass through untouched.
+func validateGatewayURL(name string, cfg ProviderConfig) (*url.URL, error) {
+	raw := cfg["url"]
+	if raw == "" {
+		provider, _ := config.LookupProxyProvider(name)
+		return nil, fmt.Errorf("%s provider requires a proxy URL: set %s or run `hitmaker config set %surl <url>`", name, provider.EnvVar(), name)
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s url is invalid: %w", name, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "socks5" {
+		return nil, fmt.Errorf("%s url must use http, https, or socks5", name)
+	}
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("%s url must include a host", name)
+	}
+	return parsed, nil
+}
+
+// rotatingGatewayTransport is the transport for a gateway that hands out a new
+// exit IP per connection: no connection reuse, every request dials fresh.
+func rotatingGatewayTransport(gateway *url.URL) *http.Transport {
+	transport := rotatingProxyTransport()
+	transport.Proxy = http.ProxyURL(gateway)
+	return transport
+}
+
+// IPRoyal routes through IPRoyal's residential gateway. Country targeting
+// rides on the password: pass_country-br.
 type IPRoyal struct{}
 
 func (IPRoyal) Name() string { return "iproyal" }
 
-func (IPRoyal) Validate(cfg ProviderConfig) error {
-	raw := cfg["url"]
-	if raw == "" {
-		return errors.New("iproyal provider requires providerConfig.url or IPROYAL_URL")
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("iproyal url is invalid: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "socks5" {
-		return errors.New("iproyal url must use http, https, or socks5")
-	}
-	if parsed.Host == "" {
-		return errors.New("iproyal url must include a host")
-	}
-	return nil
+func (p IPRoyal) Validate(cfg ProviderConfig) error {
+	_, err := validateGatewayURL(p.Name(), cfg)
+	return err
 }
 
-func (IPRoyal) Transport(ctx context.Context, cfg ProviderConfig) (*http.Transport, error) {
+func (p IPRoyal) Transport(ctx context.Context, cfg ProviderConfig) (*http.Transport, error) {
 	_ = ctx
-	raw := cfg["url"]
-	parsed, err := url.Parse(raw)
+	gateway, err := validateGatewayURL(p.Name(), cfg)
 	if err != nil {
 		return nil, err
 	}
 	// IPRoyal's geo gateway rotates the exit IP per new connection, so we must
-	// not pool/reuse connections or the run sticks to a few exits (see
-	// rotatingProxyTransport).
-	transport := rotatingProxyTransport()
-	transport.Proxy = http.ProxyURL(parsed)
-	return transport, nil
+	// not pool/reuse connections or the run sticks to a few exits.
+	return rotatingGatewayTransport(gateway), nil
+}
+
+// Evomi routes through Evomi's residential gateway. Each product has its own
+// host (Core Residential: core-residential.evomi.com; HTTP on port 1000,
+// SOCKS5 on 1002); the API's GET /public returns host, ports and credentials.
+// Targeting rides on the password, same shape as IPRoyal: pass_country-BR,
+// plus optional _city-, _region-, _session-. Without a session parameter
+// every request gets a new exit IP.
+type Evomi struct{}
+
+func (Evomi) Name() string { return "evomi" }
+
+func (p Evomi) Validate(cfg ProviderConfig) error {
+	_, err := validateGatewayURL(p.Name(), cfg)
+	return err
+}
+
+func (p Evomi) Transport(ctx context.Context, cfg ProviderConfig) (*http.Transport, error) {
+	_ = ctx
+	gateway, err := validateGatewayURL(p.Name(), cfg)
+	if err != nil {
+		return nil, err
+	}
+	return rotatingGatewayTransport(gateway), nil
 }
 
 type cachedDialer struct {

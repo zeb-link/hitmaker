@@ -41,7 +41,7 @@ func TestWeightedChoice(t *testing.T) {
 func TestFakeIPIsValidAndBounded(t *testing.T) {
 	g := New(1, 8)
 	for i := 0; i < 200; i++ {
-		ident := g.Next(60, 0, 1)
+		ident := g.Next(DeviceMix{Desktop: 60}, 1)
 		if parsed := net.ParseIP(ident.IP); parsed == nil {
 			t.Fatalf("invalid ip %q", ident.IP)
 		}
@@ -53,10 +53,45 @@ func TestFakeIPIsValidAndBounded(t *testing.T) {
 
 func TestReturningVisitorReusesSubnet(t *testing.T) {
 	g := New(2, 8)
-	first := g.Next(60, 0, 1).IP
-	second := g.Next(60, 0, 0).IP
+	first := g.Next(DeviceMix{Desktop: 60}, 1).IP
+	second := g.Next(DeviceMix{Desktop: 60}, 0).IP
 	if subnet(first) != subnet(second) {
 		t.Fatalf("subnet %s was not reused by %s", subnet(first), second)
+	}
+}
+
+func TestDeviceMixDrawsEachPool(t *testing.T) {
+	pools := map[string][]string{
+		"unknown": UnknownDeviceUserAgents,
+		"desktop": DesktopUserAgents,
+		"mobile":  MobileUserAgents,
+	}
+	poolOf := func(ua string) string {
+		for name, pool := range pools {
+			for _, candidate := range pool {
+				if candidate == ua {
+					return name
+				}
+			}
+		}
+		return "bot"
+	}
+	cases := []struct {
+		mix  DeviceMix
+		want string
+	}{
+		{DeviceMix{Bots: 100}, "bot"},
+		{DeviceMix{UnknownDevice: 100}, "unknown"},
+		{DeviceMix{Desktop: 100}, "desktop"},
+		{DeviceMix{Desktop: 0}, "mobile"},
+	}
+	for _, c := range cases {
+		g := New(3, 8)
+		for i := 0; i < 50; i++ {
+			if got := poolOf(g.Next(c.mix, 1).UserAgent); got != c.want {
+				t.Fatalf("mix %+v drew from %s, want %s", c.mix, got, c.want)
+			}
+		}
 	}
 }
 

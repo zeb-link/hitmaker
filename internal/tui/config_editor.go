@@ -87,6 +87,7 @@ func newConfigEditor(cfg config.Config) configEditor {
 			{group: "IDENTITY", label: "Method", kind: "select", key: "method"},
 			{group: "IDENTITY", label: "Bot traffic %", kind: "slider", key: "unknown", min: 0, max: 100, step: 5},
 			{group: "IDENTITY", label: "Bot pool", kind: "select", key: "botpool"},
+			{group: "IDENTITY", label: "Unknown device %", kind: "slider", key: "unknownDevice", min: 0, max: 100, step: 5},
 			{group: "IDENTITY", label: "Desktop share %", kind: "slider", key: "device", min: 0, max: 100, step: 5},
 			{group: "IDENTITY", label: "Unique IP odds", kind: "slider", key: "unique", min: 0, max: 1, step: 0.05},
 			{group: "SCHEDULE", label: "Active min", kind: "number", key: "minActive", min: 0, max: 120, step: 1},
@@ -100,8 +101,8 @@ func newConfigEditor(cfg config.Config) configEditor {
 			{group: "ENTROPY", label: "Viral links %", kind: "slider", key: "entViral", min: 0, max: 20, step: 1},
 			{group: "ORIGIN", label: "Origin mode", kind: "select", key: "mode"},
 			{group: "ORIGIN", label: "Spoofed origin", kind: "select", key: "edge"},
-			{group: "ORIGIN", label: "Proxy service", kind: "text", key: "provider"},
-			{group: "ORIGIN", label: "IPRoyal endpoint", kind: "secret", key: "iproyal"},
+			{group: "ORIGIN", label: "Proxy service", kind: "select", key: "provider"},
+			{group: "ORIGIN", label: "Proxy endpoint", kind: "secret", key: "proxyurl"},
 			{group: "URL PARAMS", label: "Rules & payloads", kind: "open", key: "params"},
 		},
 		input: input,
@@ -395,6 +396,8 @@ func (e configEditor) currentSelectValue(key string) string {
 		return string(e.cfg.Origin.Mode)
 	case "edge":
 		return string(e.cfg.Origin.Edge)
+	case "provider":
+		return e.cfg.Origin.ProviderName()
 	case "entropy":
 		return string(e.cfg.Entropy.Level)
 	case "botpool":
@@ -432,6 +435,12 @@ func (e configEditor) selectOptions(key string) []selectOption {
 			{label: "Vercel", value: string(config.EdgeVercel)},
 			{label: "Cloudflare", value: string(config.EdgeCloudflare)},
 		}
+	case "provider":
+		options := make([]selectOption, len(config.ProxyProviders))
+		for i, provider := range config.ProxyProviders {
+			options[i] = selectOption{label: provider.Label, value: provider.Name}
+		}
+		return options
 	case "entropy":
 		options := []selectOption{
 			{label: "Off", value: string(config.EntropyOff)},
@@ -483,6 +492,8 @@ func (e *configEditor) adjust(dir int) {
 		e.cfg.Requests.DeviceRatio = clampInt(e.cfg.Requests.DeviceRatio+dir*5, 0, 100)
 	case "unknown":
 		e.cfg.Requests.UnknownRatio = clampInt(e.cfg.Requests.UnknownRatio+dir*5, 0, 100)
+	case "unknownDevice":
+		e.cfg.Requests.UnknownDeviceRatio = clampInt(e.cfg.Requests.UnknownDeviceRatio+dir*5, 0, 100)
 	case "unique":
 		e.cfg.Requests.UniqueIPProb = clampFloat(e.cfg.Requests.UniqueIPProb+float64(dir)*0.05, 0, 1)
 	case "minActive":
@@ -509,9 +520,8 @@ func (e *configEditor) adjust(dir int) {
 		e.cfg.Entropy.ViralPercent = clampInt(e.cfg.Entropy.ViralPercent+dir*int(field.step), 0, 100)
 	case "mode":
 		e.cfg.Origin.Mode = config.Mode(rotate(string(e.cfg.Origin.Mode), []string{"off", "auto", "spoof", "proxy"}, dir))
-		if (e.cfg.Origin.Mode == config.ModeAuto || e.cfg.Origin.Mode == config.ModeProxy) && e.cfg.Origin.Provider == "" {
-			e.cfg.Origin.Provider = "iproyal"
-		}
+	case "provider":
+		e.cfg.Origin.Provider = rotate(e.cfg.Origin.ProviderName(), config.ProxyProviderNames(), dir)
 	case "edge":
 		e.cfg.Origin.Edge = config.Edge(rotate(string(e.cfg.Origin.Edge), []string{"vercel", "cloudflare"}, dir))
 	case "botpool":
@@ -562,6 +572,8 @@ func (e *configEditor) setRaw(key, value string) {
 		e.cfg.Requests.DeviceRatio = atoi(value, e.cfg.Requests.DeviceRatio)
 	case "unknown":
 		e.cfg.Requests.UnknownRatio = atoi(value, e.cfg.Requests.UnknownRatio)
+	case "unknownDevice":
+		e.cfg.Requests.UnknownDeviceRatio = atoi(value, e.cfg.Requests.UnknownDeviceRatio)
 	case "unique":
 		e.cfg.Requests.UniqueIPProb = atof(value, e.cfg.Requests.UniqueIPProb)
 	case "minActive":
@@ -587,14 +599,8 @@ func (e *configEditor) setRaw(key, value string) {
 		e.cfg.Origin.Mode = config.Mode(value)
 	case "edge":
 		e.cfg.Origin.Edge = config.Edge(value)
-	case "provider":
-		e.cfg.Origin.Provider = value
-	case "iproyal":
-		if e.cfg.Origin.ProviderConfig == nil {
-			e.cfg.Origin.ProviderConfig = map[string]string{}
-		}
-		e.cfg.Origin.Provider = "iproyal"
-		e.cfg.Origin.ProviderConfig["url"] = value
+	case "proxyurl":
+		e.cfg.Origin.SetProviderSetting(e.cfg.Origin.ProviderName(), "url", value)
 	}
 	if err := e.cfg.Validate(); err != nil {
 		e.status = err.Error()
@@ -604,7 +610,7 @@ func (e *configEditor) setRaw(key, value string) {
 }
 
 func (e configEditor) fieldDisabled(field editorField) bool {
-	if field.key == "provider" || field.key == "iproyal" {
+	if field.key == "provider" || field.key == "proxyurl" {
 		return e.cfg.Origin.Mode != config.ModeProxy && e.cfg.Origin.Mode != config.ModeAuto
 	}
 	if field.key == "edge" {
@@ -860,8 +866,10 @@ func (e configEditor) fieldInstructions(field editorField) string {
 		switch field.key {
 		case "unknown":
 			return "Percent of all hits sent as bots/agents. Pick which bots in Bot pool below."
+		case "unknownDevice":
+			return "Of the human hits, the percent from browsers that can't be placed as desktop or mobile."
 		case "device":
-			return "Of the non-bot (human) hits, the percent that are desktop vs mobile."
+			return "Of the remaining human hits, the percent that are desktop vs mobile."
 		case "unique":
 			return "Odds each hit uses a fresh IP. Lower means more returning-visitor repeats."
 		case "entDevice":
@@ -894,7 +902,7 @@ func (e configEditor) fieldInstructions(field editorField) string {
 
 func (e configEditor) guideCurrentValue(field editorField) string {
 	switch field.key {
-	case "iproyal":
+	case "proxyurl":
 		if e.rawValue(field.key) == "" || e.fieldDisabled(field) {
 			return "not set"
 		}
@@ -926,8 +934,10 @@ func (e configEditor) fieldGuide(field editorField) fieldGuide {
 		return fieldGuide{summary: "Percent of traffic sent as known bots or non-human agents.", details: []string{"The Bot pool field controls which bot identities are eligible.", "Set to 0 for human-only identity rotation."}}
 	case "botpool":
 		return fieldGuide{summary: "Which bot identities can be used when Bot traffic is above 0%.", details: []string{"All bots includes crawlers, AI agents, fetchers, CLIs, and libraries.", "Use narrower pools to exercise specific analytics buckets."}}
+	case "unknownDevice":
+		return fieldGuide{summary: "Human traffic from browsers that can't be placed as desktop or mobile.", details: []string{"These visitors name a platform but no browser, so analytics file them under an unknown device while still counting them as people.", "Bots are separate: they come from Bot traffic % and never land here."}}
 	case "device":
-		return fieldGuide{summary: "Desktop share for non-bot traffic.", details: []string{"The rest of human traffic is mobile.", "Bot traffic ignores this ratio and uses each bot's real user agent."}}
+		return fieldGuide{summary: "Desktop share for the remaining human traffic.", details: []string{"The rest is mobile, after Unknown device % takes its share.", "Bot traffic ignores this ratio and uses each bot's real user agent."}}
 	case "unique":
 		return fieldGuide{summary: "Chance that a hit receives a fresh synthetic visitor IP.", details: []string{"Lower values create more repeat-visitor behavior.", "This affects identity headers and display stats, not paid proxy exit selection."}}
 	case "minActive":
@@ -967,9 +977,17 @@ func (e configEditor) fieldGuide(field editorField) fieldGuide {
 			"Cloudflare: cf-connecting-ip and cf-ipcountry, plus x-hitmaker-* geo headers your service honors in dev/non-prod (real request.cf can't be spoofed by a client).",
 		}}
 	case "provider":
-		return fieldGuide{summary: "Paid proxy provider used by Proxy mode and by Auto mode for public-domain targets.", details: []string{"Currently supported provider: iproyal.", "Credentials are redacted in config output."}}
-	case "iproyal":
-		return fieldGuide{summary: "IPRoyal proxy endpoint URL.", details: []string{"Expected format: http://user:pass@host:port.", "Required when Proxy mode is used, or when Auto mode targets public domains."}}
+		return fieldGuide{summary: "Paid proxy provider used by Proxy mode and by Auto mode for public-domain targets.", details: []string{
+			"Each provider keeps its own endpoint, so switching never loses saved credentials.",
+			"Credentials are redacted in config output.",
+		}}
+	case "proxyurl":
+		provider, _ := config.LookupProxyProvider(e.cfg.Origin.ProviderName())
+		return fieldGuide{summary: provider.Label + " proxy endpoint URL (" + provider.EnvVar() + " overrides it).", details: []string{
+			"Expected format: " + provider.Example + ".",
+			"Targeting rides in the credentials in the provider's own syntax, e.g. pass_country-br.",
+			"Required when Proxy mode is used, or when Auto mode targets public domains.",
+		}}
 	case "params":
 		return fieldGuide{summary: "Probabilistic URL parameter rules and payload variants.", details: []string{"Use this to add campaign, QR, or test params to some hits.", "Payload variants let one rule choose between weighted parameter sets."}}
 	default:
@@ -1079,7 +1097,7 @@ func (e configEditor) previewLines(contentWidth int) []string {
 		row("Traffic", fmt.Sprintf("%d–%d hits/min · %d worker(s)", cfg.Traffic.MinPerMin, cfg.Traffic.MaxPerMin, cfg.Traffic.Concurrent)),
 		row("Method", cfg.Requests.Method),
 		row("Bots", fmt.Sprintf("%d%% · %s", cfg.Requests.UnknownRatio, botPoolLabel(cfg.Requests.Bots))),
-		row("Devices", fmt.Sprintf("%d%% desktop · %.0f%% unique IP", cfg.Requests.DeviceRatio, cfg.Requests.UniqueIPProb*100)),
+		row("Devices", fmt.Sprintf("%d%% unknown · %d%% desktop · %.0f%% unique IP", cfg.Requests.UnknownDeviceRatio, cfg.Requests.DeviceRatio, cfg.Requests.UniqueIPProb*100)),
 		row("Schedule", fmt.Sprintf("active %d–%dm · idle %.0f%% for %d–%dm",
 			cfg.Schedule.MinActive, cfg.Schedule.MaxActive, cfg.Schedule.IdleOdds*100, cfg.Schedule.MinIdle, cfg.Schedule.MaxIdle)),
 		row("Entropy", entropy),
@@ -1257,6 +1275,8 @@ func (e configEditor) rawValue(key string) string {
 		return strconv.Itoa(e.cfg.Requests.DeviceRatio)
 	case "unknown":
 		return strconv.Itoa(e.cfg.Requests.UnknownRatio)
+	case "unknownDevice":
+		return strconv.Itoa(e.cfg.Requests.UnknownDeviceRatio)
 	case "unique":
 		return fmt.Sprintf("%.2f", e.cfg.Requests.UniqueIPProb)
 	case "minActive":
@@ -1284,13 +1304,8 @@ func (e configEditor) rawValue(key string) string {
 		return string(e.cfg.Origin.Mode)
 	case "botpool":
 		return botPoolLabel(e.cfg.Requests.Bots)
-	case "provider":
-		return e.cfg.Origin.Provider
-	case "iproyal":
-		if e.cfg.Origin.ProviderConfig == nil {
-			return ""
-		}
-		return e.cfg.Origin.ProviderConfig["url"]
+	case "proxyurl":
+		return e.cfg.Origin.ProviderURL(e.cfg.Origin.ProviderName())
 	default:
 		return ""
 	}
@@ -1463,6 +1478,8 @@ func keyLabel(key string) string {
 		return "desktop share"
 	case "unknown":
 		return "bot traffic"
+	case "unknownDevice":
+		return "unknown device"
 	case "unique":
 		return "unique IP odds"
 	case "idleOdds":

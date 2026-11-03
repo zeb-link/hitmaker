@@ -53,11 +53,16 @@ type TrafficConfig struct {
 }
 
 type RequestConfig struct {
-	Method       string     `json:"method"`
-	DeviceRatio  int        `json:"deviceRatio"`
-	UnknownRatio int        `json:"unknownRatio"`
-	UniqueIPProb float64    `json:"uniqueIpProb"`
-	URLParams    []URLParam `json:"urlParams"`
+	Method       string `json:"method"`
+	DeviceRatio  int    `json:"deviceRatio"`
+	UnknownRatio int    `json:"unknownRatio"`
+	// UnknownDeviceRatio is the percent of human (non-bot) hits sent from
+	// browsers that can't be placed as desktop or mobile, so an analytics
+	// target's unknown-device bucket gets real people. DeviceRatio splits the
+	// rest.
+	UnknownDeviceRatio int        `json:"unknownDeviceRatio"`
+	UniqueIPProb       float64    `json:"uniqueIpProb"`
+	URLParams          []URLParam `json:"urlParams"`
 	// Bots restricts the unknown/bot pool to specific categories (e.g.
 	// "ai_crawler") or exact names (e.g. "GPTBot"). Empty means the whole
 	// catalog. UnknownRatio still governs how much traffic is bots.
@@ -152,10 +157,15 @@ func (e EntropyConfig) Params() EntropyParams {
 }
 
 type OriginConfig struct {
-	Mode           Mode              `json:"mode"`
-	Edge           Edge              `json:"edge,omitempty"`
-	Provider       string            `json:"provider,omitempty"`
-	ProviderConfig map[string]string `json:"providerConfig,omitempty"`
+	Mode Mode `json:"mode"`
+	Edge Edge `json:"edge,omitempty"`
+	// Provider selects which entry of Providers proxy routing uses (see
+	// ProxyProviders). Empty means DefaultProxyProvider.
+	Provider string `json:"provider,omitempty"`
+	// Providers holds each proxy service's settings (today just "url") keyed
+	// by provider name, so switching Provider never discards another
+	// service's credentials.
+	Providers map[string]map[string]string `json:"providers,omitempty"`
 }
 
 type URLParam struct {
@@ -187,12 +197,14 @@ type PartialTraffic struct {
 }
 
 type PartialRequest struct {
-	Method       *string     `json:"method,omitempty"`
-	DeviceRatio  *int        `json:"deviceRatio,omitempty"`
-	UnknownRatio *int        `json:"unknownRatio,omitempty"`
-	UniqueIPProb *float64    `json:"uniqueIpProb,omitempty"`
-	URLParams    *[]URLParam `json:"urlParams,omitempty"`
-	Bots         *[]string   `json:"bots,omitempty"`
+	Method       *string `json:"method,omitempty"`
+	DeviceRatio  *int    `json:"deviceRatio,omitempty"`
+	UnknownRatio *int    `json:"unknownRatio,omitempty"`
+	// UnknownDeviceRatio: see RequestConfig.
+	UnknownDeviceRatio *int        `json:"unknownDeviceRatio,omitempty"`
+	UniqueIPProb       *float64    `json:"uniqueIpProb,omitempty"`
+	URLParams          *[]URLParam `json:"urlParams,omitempty"`
+	Bots               *[]string   `json:"bots,omitempty"`
 }
 
 type PartialSchedule struct {
@@ -211,9 +223,15 @@ type PartialEntropy struct {
 }
 
 type PartialOrigin struct {
-	Mode           *Mode              `json:"mode,omitempty"`
-	Edge           *Edge              `json:"edge,omitempty"`
-	Provider       *string            `json:"provider,omitempty"`
+	Mode     *Mode   `json:"mode,omitempty"`
+	Edge     *Edge   `json:"edge,omitempty"`
+	Provider *string `json:"provider,omitempty"`
+	// Providers merges per provider and per setting, so a layer that sets one
+	// provider's URL leaves every other saved credential in place.
+	Providers map[string]map[string]string `json:"providers,omitempty"`
+	// ProviderConfig is the pre-2.6 single-provider shape. It is read from
+	// older config files and folded into Providers when the file is read
+	// (see foldLegacyProviderConfig); it is never written.
 	ProviderConfig *map[string]string `json:"providerConfig,omitempty"`
 }
 
@@ -226,10 +244,11 @@ func Default() Config {
 			TimeoutMs:  5000,
 		},
 		Requests: RequestConfig{
-			Method:       "GET",
-			DeviceRatio:  60,
-			UnknownRatio: 5,
-			UniqueIPProb: 0.95,
+			Method:             "GET",
+			DeviceRatio:        60,
+			UnknownRatio:       5,
+			UnknownDeviceRatio: 5,
+			UniqueIPProb:       0.95,
 			// No default URL params: targets are opaque URLs, and an
 			// injected param silently pollutes whatever query-string
 			// semantics the target system has. Params are strictly
@@ -373,6 +392,9 @@ func (c Config) Validate() error {
 	if c.Requests.UnknownRatio < 0 || c.Requests.UnknownRatio > 100 {
 		return errors.New("unknownRatio must be 0..100")
 	}
+	if c.Requests.UnknownDeviceRatio < 0 || c.Requests.UnknownDeviceRatio > 100 {
+		return errors.New("unknownDeviceRatio must be 0..100")
+	}
 	if c.Requests.UniqueIPProb < 0 || c.Requests.UniqueIPProb > 1 {
 		return errors.New("uniqueIpProb must be 0..1")
 	}
@@ -409,6 +431,9 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("unknown edge %q", c.Origin.Edge)
 	}
+	if _, ok := LookupProxyProvider(c.Origin.ProviderName()); !ok {
+		return unknownProviderError(c.Origin.Provider)
+	}
 	if _, err := c.BotFilter(); err != nil {
 		return err
 	}
@@ -436,14 +461,13 @@ func splitTokens(raw string) []string {
 
 func (c Config) Redacted() Config {
 	cp := c
-	if len(cp.Origin.ProviderConfig) > 0 {
-		cp.Origin.ProviderConfig = map[string]string{}
-		for key, value := range c.Origin.ProviderConfig {
-			if value == "" {
-				cp.Origin.ProviderConfig[key] = ""
-			} else {
-				cp.Origin.ProviderConfig[key] = "********"
+	cp.Origin.Providers = nil
+	for name, settings := range c.Origin.Providers {
+		for key, value := range settings {
+			if value != "" {
+				value = "********"
 			}
+			cp.Origin.SetProviderSetting(name, key, value)
 		}
 	}
 	return cp
@@ -474,7 +498,34 @@ func readPartial(path string) (Partial, bool, error) {
 		return Partial{}, false, fmt.Errorf("load %s: %w", path, err)
 	}
 	mergePartial(&partial, legacy)
+	foldLegacyProviderConfig(partial.Origin)
 	return partial, true, nil
+}
+
+// foldLegacyProviderConfig moves a pre-2.6 providerConfig block into Providers
+// at read time, under the file's own provider. A file without one predates
+// multi-provider support, so its credentials are IPRoyal's. Folding here, not
+// in merge, keeps another layer's provider choice from claiming them.
+func foldLegacyProviderConfig(origin *PartialOrigin) {
+	if origin == nil || origin.ProviderConfig == nil {
+		return
+	}
+	name := legacyProxyProvider
+	if origin.Provider != nil && *origin.Provider != "" {
+		name = strings.ToLower(*origin.Provider)
+	}
+	if origin.Providers == nil {
+		origin.Providers = map[string]map[string]string{}
+	}
+	if origin.Providers[name] == nil {
+		origin.Providers[name] = map[string]string{}
+	}
+	for key, value := range *origin.ProviderConfig {
+		if _, set := origin.Providers[name][key]; !set {
+			origin.Providers[name][key] = value
+		}
+	}
+	origin.ProviderConfig = nil
 }
 
 func writeJSON(path string, cfg Config, makeParent bool) error {
@@ -491,7 +542,12 @@ func writeJSON(path string, cfg Config, makeParent bool) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	// WriteFile only applies the mode when it creates the file; tighten an
+	// existing one too, since it may hold proxy credentials.
+	return os.Chmod(path, 0o600)
 }
 
 func merge(cfg *Config, partial Partial) {
@@ -518,6 +574,9 @@ func merge(cfg *Config, partial Partial) {
 		}
 		if partial.Requests.UnknownRatio != nil {
 			cfg.Requests.UnknownRatio = *partial.Requests.UnknownRatio
+		}
+		if partial.Requests.UnknownDeviceRatio != nil {
+			cfg.Requests.UnknownDeviceRatio = *partial.Requests.UnknownDeviceRatio
 		}
 		if partial.Requests.UniqueIPProb != nil {
 			cfg.Requests.UniqueIPProb = *partial.Requests.UniqueIPProb
@@ -570,8 +629,10 @@ func merge(cfg *Config, partial Partial) {
 		if partial.Origin.Provider != nil {
 			cfg.Origin.Provider = *partial.Origin.Provider
 		}
-		if partial.Origin.ProviderConfig != nil {
-			cfg.Origin.ProviderConfig = *partial.Origin.ProviderConfig
+		for name, settings := range partial.Origin.Providers {
+			for key, value := range settings {
+				cfg.Origin.SetProviderSetting(name, key, value)
+			}
 		}
 	}
 }
@@ -606,6 +667,9 @@ func mergePartial(dst *Partial, src Partial) {
 		}
 		if src.Requests.UnknownRatio != nil {
 			dst.Requests.UnknownRatio = src.Requests.UnknownRatio
+		}
+		if src.Requests.UnknownDeviceRatio != nil {
+			dst.Requests.UnknownDeviceRatio = src.Requests.UnknownDeviceRatio
 		}
 		if src.Requests.UniqueIPProb != nil {
 			dst.Requests.UniqueIPProb = src.Requests.UniqueIPProb
@@ -670,6 +734,17 @@ func mergePartial(dst *Partial, src Partial) {
 		if src.Origin.ProviderConfig != nil {
 			dst.Origin.ProviderConfig = src.Origin.ProviderConfig
 		}
+		for name, settings := range src.Origin.Providers {
+			if dst.Origin.Providers == nil {
+				dst.Origin.Providers = map[string]map[string]string{}
+			}
+			if dst.Origin.Providers[name] == nil {
+				dst.Origin.Providers[name] = map[string]string{}
+			}
+			for key, value := range settings {
+				dst.Origin.Providers[name][key] = value
+			}
+		}
 	}
 }
 
@@ -731,12 +806,13 @@ func legacyPartial(data []byte) (Partial, error) {
 			p.Origin.Mode = &mode
 		}
 		if legacy.ProxyServiceURL != nil && *legacy.ProxyServiceURL != "" {
-			provider := "iproyal"
-			providerCfg := map[string]string{"url": *legacy.ProxyServiceURL}
+			// The URL is IPRoyal's, but the file never chose a provider, so it
+			// leaves the selection to the other layers.
 			mode := ModeProxy
 			p.Origin.Mode = &mode
-			p.Origin.Provider = &provider
-			p.Origin.ProviderConfig = &providerCfg
+			p.Origin.Providers = map[string]map[string]string{
+				legacyProxyProvider: {"url": *legacy.ProxyServiceURL},
+			}
 		}
 	}
 	return p, nil
@@ -789,6 +865,12 @@ func envPartial() (Partial, error) {
 		return p, err
 	} else if ok {
 		r.UnknownRatio = &value
+		usedR = true
+	}
+	if value, ok, err := envInt("UNKNOWN_DEVICE_RATIO"); err != nil {
+		return p, err
+	} else if ok {
+		r.UnknownDeviceRatio = &value
 		usedR = true
 	}
 	if value, ok, err := envFloat("UNIQUE_IP_PROB"); err != nil {
@@ -881,21 +963,30 @@ func envPartial() (Partial, error) {
 		o.Provider = &value
 		usedO = true
 	}
-	if value, ok := os.LookupEnv("IPROYAL_URL"); ok {
-		cfg := map[string]string{"url": value}
-		o.ProviderConfig = &cfg
-		provider := "iproyal"
-		o.Provider = &provider
+	// Each provider's <NAME>_URL supplies its endpoint and switches to proxy
+	// mode. When exactly one is set and HITMAKER_PROVIDER isn't, that provider
+	// is selected too, so `EVOMI_URL=… hitmaker run` just works.
+	var envProviders []string
+	for _, provider := range ProxyProviders {
+		value, ok := os.LookupEnv(provider.EnvVar())
+		if !ok && provider.Name == "iproyal" {
+			value, ok = os.LookupEnv("PROXY_SERVICE_URL")
+		}
+		if !ok {
+			continue
+		}
+		if o.Providers == nil {
+			o.Providers = map[string]map[string]string{}
+		}
+		o.Providers[provider.Name] = map[string]string{"url": value}
+		envProviders = append(envProviders, provider.Name)
+	}
+	if len(envProviders) > 0 {
 		mode := ModeProxy
 		o.Mode = &mode
-		usedO = true
-	} else if value, ok := os.LookupEnv("PROXY_SERVICE_URL"); ok {
-		cfg := map[string]string{"url": value}
-		o.ProviderConfig = &cfg
-		provider := "iproyal"
-		o.Provider = &provider
-		mode := ModeProxy
-		o.Mode = &mode
+		if o.Provider == nil && len(envProviders) == 1 {
+			o.Provider = &envProviders[0]
+		}
 		usedO = true
 	}
 

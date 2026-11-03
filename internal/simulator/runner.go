@@ -303,7 +303,11 @@ func (r *Runner) doHit(target string, workerID int, rng *rand.Rand) {
 	if p, ok := r.personas[target]; ok {
 		deviceRatio = p.deviceRatio
 	}
-	ident := r.idgen.Next(deviceRatio, r.cfg.Requests.UnknownRatio, r.cfg.Requests.UniqueIPProb)
+	ident := r.idgen.Next(identity.DeviceMix{
+		Bots:          r.cfg.Requests.UnknownRatio,
+		UnknownDevice: r.cfg.Requests.UnknownDeviceRatio,
+		Desktop:       deviceRatio,
+	}, r.cfg.Requests.UniqueIPProb)
 	applied, err := urlparams.Apply(target, r.cfg.Requests.URLParams, rng)
 	if err != nil {
 		r.collector.Add(HitResult{Target: target, WorkerID: workerID, Err: err.Error(), At: time.Now(), Phase: PhaseActive})

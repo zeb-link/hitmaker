@@ -17,6 +17,22 @@ var MobileUserAgents = []string{
 	"Mozilla/5.0 (Linux; Android 13; SM-X906C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
+// UnknownDeviceUserAgents are human visitors whose browser can't be placed:
+// a platform and nothing else — no engine, no browser token, no bot marker —
+// the shape privacy tools, stripped embedded clients, and truncated headers
+// produce. Parsers that need a recognized browser to call a device desktop or
+// mobile file these as an unknown device, while bot detection lets them
+// through as people. Keep phone and tablet platforms out: those alone are
+// enough for a parser to say mobile.
+var UnknownDeviceUserAgents = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+	"Mozilla/5.0 (X11; Linux x86_64)",
+	"Mozilla/5.0 (X11; Ubuntu; Linux x86_64)",
+	"Mozilla/5.0 (X11; Fedora; Linux x86_64)",
+	"Mozilla/5.0",
+}
+
 var AcceptLanguages = []string{
 	"en-US,en;q=0.9",
 	"en-GB,en;q=0.9",
@@ -56,9 +72,9 @@ var RegionNames = map[string]string{
 	"IN-DL": "National Capital Territory of Delhi", "IN-KA": "Karnataka", "IN-MH": "Maharashtra",
 	"IT-25": "Lombardy", "IT-62": "Lazio",
 	"JP-13": "Tokyo", "JP-27": "Ōsaka",
-	"KR-11": "Seoul",
+	"KR-11":  "Seoul",
 	"MX-CMX": "Mexico City",
-	"NL-NH": "North Holland", "NL-ZH": "South Holland",
+	"NL-NH":  "North Holland", "NL-ZH": "South Holland",
 	"NO-03": "Oslo",
 	"PL-MZ": "Mazovia",
 	"SE-AB": "Stockholm", "SE-O": "Västra Götaland",

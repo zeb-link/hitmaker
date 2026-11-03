@@ -96,6 +96,10 @@ func setKey(cfg *config.Config, key, raw string) error {
 		value, err := strconv.Atoi(raw)
 		cfg.Requests.UnknownRatio = value
 		return err
+	case "requests.unknowndeviceratio", "unknowndeviceratio", "unknown_device_ratio":
+		value, err := strconv.Atoi(raw)
+		cfg.Requests.UnknownDeviceRatio = value
+		return err
 	case "requests.uniqueipprob", "uniqueipprob", "unique_ip_prob":
 		value, err := strconv.ParseFloat(raw, 64)
 		cfg.Requests.UniqueIPProb = value
@@ -138,16 +142,50 @@ func setKey(cfg *config.Config, key, raw string) error {
 	case "origin.edge", "edge":
 		cfg.Origin.Edge = config.Edge(strings.ToLower(strings.TrimSpace(raw)))
 	case "origin.provider", "provider":
-		cfg.Origin.Provider = raw
-	case "origin.iproyalurl", "iproyalurl", "iproyal_url":
-		if cfg.Origin.ProviderConfig == nil {
-			cfg.Origin.ProviderConfig = map[string]string{}
-		}
-		cfg.Origin.Provider = "iproyal"
-		cfg.Origin.ProviderConfig["url"] = raw
+		cfg.Origin.Provider = strings.ToLower(strings.TrimSpace(raw))
+	case "origin.proxyurl", "proxyurl", "proxy_url", "proxy-url":
+		cfg.Origin.SetProviderSetting(cfg.Origin.ProviderName(), "url", raw)
 	default:
-		return fmt.Errorf("unknown config key %q", key)
+		// <name>url sets that provider's endpoint and selects it, e.g.
+		// `config set evomiurl http://user:pass@rp.evomi.com:1000`.
+		provider, ok := providerURLKey(key)
+		if !ok {
+			return fmt.Errorf("unknown config key %q", key)
+		}
+		cfg.Origin.Provider = provider.Name
+		cfg.Origin.SetProviderSetting(provider.Name, "url", raw)
 	}
 	cfg.Normalize()
 	return cfg.Validate()
+}
+
+// providerURLKey matches the per-provider endpoint keys: <name>url,
+// <name>_url, <name>-url, each optionally prefixed with "origin.".
+func providerURLKey(key string) (config.ProxyProvider, bool) {
+	key = strings.TrimPrefix(strings.ToLower(key), "origin.")
+	for _, provider := range config.ProxyProviders {
+		switch key {
+		case provider.Name + "url", provider.Name + "_url", provider.Name + "-url":
+			return provider, true
+		}
+	}
+	return config.ProxyProvider{}, false
+}
+
+// applyProviderFlag applies a run/probe --provider override, rejecting names
+// that aren't in config.ProxyProviders.
+func applyProviderFlag(cfg *config.Config, raw string) error {
+	if raw == "" {
+		return nil
+	}
+	provider, ok := config.LookupProxyProvider(raw)
+	if !ok {
+		return fmt.Errorf("--provider %q is not supported (supported: %s)", raw, strings.Join(config.ProxyProviderNames(), ", "))
+	}
+	cfg.Origin.Provider = provider.Name
+	return nil
+}
+
+func providerFlagUsage() string {
+	return "proxy provider for proxy/auto mode: " + strings.Join(config.ProxyProviderNames(), ", ")
 }

@@ -236,3 +236,30 @@ func contains(value, needle string) bool {
 	}
 	return false
 }
+
+func TestConfigEditorProviderPickerKeepsEachEndpoint(t *testing.T) {
+	cfg := config.Default()
+	cfg.Origin.Mode = config.ModeProxy
+	for _, provider := range config.ProxyProviders {
+		cfg.Origin.SetProviderSetting(provider.Name, "url", provider.Example)
+	}
+	editor := newConfigEditor(cfg)
+	for i, field := range editor.fields {
+		if field.key == "provider" {
+			editor.focus = i
+			break
+		}
+	}
+	for range config.ProxyProviders {
+		before := editor.cfg.Origin.ProviderName()
+		editor, _, _ = editor.Update(keyMsg("right"))
+		after := editor.cfg.Origin.ProviderName()
+		if after == before {
+			t.Fatalf("right arrow did not change provider from %q", before)
+		}
+		want, _ := config.LookupProxyProvider(after)
+		if got := editor.rawValue("proxyurl"); got != want.Example {
+			t.Fatalf("endpoint for %s = %q, want %q", after, got, want.Example)
+		}
+	}
+}

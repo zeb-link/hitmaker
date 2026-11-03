@@ -31,7 +31,7 @@ The npm package ships a prebuilt native binary for your platform (macOS, Linux,
 and Windows on x64 or arm64). Node is used to install it, not to run it. There
 is no install script, so it works under `--ignore-scripts`.
 
-If you have Go 1.25 and would rather not go through npm:
+If you have Go 1.27 and would rather not go through npm:
 
 ```bash
 go install github.com/zeb-link/hitmaker/v2/cmd/hitmaker@latest
@@ -112,7 +112,8 @@ status instead. `probe` prints the status of the hop it stops on.
 | `--edge vercel\|cloudflare` | Spoofed origin — which edge a direct (spoof) request mimics. Applies in `spoof` and `auto`. |
 | `--bot-ratio 0-100` | Percent of traffic that is bots. **Same knob** as config `unknownRatio`. |
 | `--bots <spec>` | Which bots (see [Bots & AI crawlers](#bots--ai-crawlers)). |
-| `--device-ratio 0-100` | Of the human hits, percent desktop vs mobile. |
+| `--unknown-device-ratio 0-100` | Of the human hits, percent from browsers that can't be placed as desktop or mobile. Config `unknownDeviceRatio`. |
+| `--device-ratio 0-100` | Of the remaining human hits, percent desktop vs mobile. |
 | `--follow` | Follow redirects (default off). |
 | `--seed N` | Reproducible identities and schedule (0 = random). |
 | `--json` | Stream one compact JSON snapshot per line (NDJSON). |
@@ -230,12 +231,42 @@ To wire it up on your side:
    show up wherever your service records geo (logs, analytics, a debug endpoint) rather
    than your own real location.
 
-Proxy support is an adapter interface; the one adapter so far is `iproyal`:
+### Proxy providers
+
+`proxy` and `auto` modes route through a paid residential proxy. Two providers
+are supported, and each keeps its own saved endpoint, so switching between them
+never loses credentials:
+
+| Provider | `provider` value | Env var | Endpoint shape |
+| --- | --- | --- | --- |
+| IPRoyal | `iproyal` (default) | `IPROYAL_URL` | `http://user:pass@geo.iproyal.com:12321` |
+| Evomi | `evomi` | `EVOMI_URL` | `http://user:pass@core-residential.evomi.com:1000` |
+
+Everything is settable without the TUI, so remote and scripted callers have
+three ways in, highest precedence first:
 
 ```bash
-IPROYAL_URL='http://user:pass@geo.iproyal.com:12321' hitmaker run --mode proxy https://example.com
+# 1. Per run: a flag picks the provider; its endpoint comes from env or saved config
+hitmaker run --mode proxy --provider evomi https://example.com
+
+# 2. Env vars: a provider's <NAME>_URL turns on proxy mode, and selects that
+#    provider when it's the only one set. With several set, HITMAKER_PROVIDER picks.
+EVOMI_URL='http://user:pass@core-residential.evomi.com:1000' hitmaker run https://example.com
 IPROYAL_URL='http://user:pass@geo.iproyal.com:12321' hitmaker run --mode auto https://example.com http://localhost:3000
+
+# 3. Saved config (~/.hitmaker/config.json, mode 0600)
+hitmaker config set evomiurl 'http://user:pass@core-residential.evomi.com:1000'  # saves and selects Evomi
+hitmaker config set provider iproyal     # switch back; Evomi's URL stays saved
+hitmaker config set proxy-url '...'      # set the selected provider's URL
 ```
+
+Both providers hand out a new exit IP per connection, and Hitmaker opens a fresh
+connection per request so traffic spreads across many IPs. Targeting options go
+in the password, in each provider's own syntax. Both use the same country form,
+e.g. `pass_country-br`. Evomi also takes `_city-`, `_region-` and `_session-`.
+Evomi gives each product its own host. Its API (`GET https://api.evomi.com/public`
+with an `x-apikey` header) returns the host, ports, username and password for
+each one.
 
 Proxy credentials are never printed by `config print`.
 
@@ -282,8 +313,10 @@ Bot traffic is controlled by two separate settings:
 
 1. **How much** of the traffic is bots — the **`Bot traffic %`** slider in the
    config editor, the `--bot-ratio` flag, or `unknownRatio` in config. `0` = all
-   human browsers, `100` = every hit is a bot. The rest of the traffic is human
-   (desktop/mobile per the `Desktop share %` slider).
+   human browsers, `100` = every hit is a bot. The rest of the traffic is human:
+   **`Unknown device %`** of it comes from browsers that name a platform but no
+   browser (analytics count them as people with an unknown device), and the
+   remainder splits desktop/mobile per the `Desktop share %` slider.
 2. **Which** bots — the **`Bot pool`** selector in the config editor, the
    `--bots` flag, or `bots` in config. Pick a category (`ai`, `crawler`, …) or
    exact names. Within the pool, individual bots appear weighted by how common
@@ -331,6 +364,7 @@ Config files are written with mode `0600`; the global config directory uses
     "method": "GET",
     "deviceRatio": 60,
     "unknownRatio": 5,
+    "unknownDeviceRatio": 5,
     "uniqueIpProb": 0.95,
     "urlParams": [
       { "key": "qr", "value": "1", "probability": 1 }
@@ -419,8 +453,9 @@ the config locally and closes the editor (from the live dashboard it also
 hot-reloads the running traffic). `Esc` discards edits.
 
 The **IDENTITY** group is where bot traffic is shaped: **Bot traffic %** sets how
-much of the traffic is bots, **Bot pool** sets which bots, and **Desktop share %**
-splits the remaining human traffic between desktop and mobile — see
+much of the traffic is bots, **Bot pool** sets which bots, **Unknown device %**
+sets how much of the human traffic comes from unplaceable browsers, and
+**Desktop share %** splits the rest between desktop and mobile — see
 [Setting the ratio](#setting-the-ratio-two-independent-knobs).
 
 The URL params editor supports weighted payload variants for simulating QR, UTM,
@@ -449,6 +484,21 @@ make release-check  # test, cross-compile, assemble and dry-run the npm packages
 
 Releases are automatic: push a `v*` tag and CI publishes to npm. See
 `RELEASE.md` for the details.
+
+### Adding a proxy provider
+
+1. Add an entry to `ProxyProviders` in `internal/config/providers.go` (name,
+   label, example endpoint). That one entry drives the `provider` value, the
+   `<NAME>_URL` env var, `config set <name>url`, the `--provider` flag, and the
+   TUI picker.
+2. Add an adapter implementing `Provider` in `internal/proxy/proxy.go` and
+   register it in `DefaultRegistry`. A gateway that takes credentials in a URL
+   and rotates the exit IP per connection is a few lines on top of
+   `validateGatewayURL` + `rotatingGatewayTransport` (see `IPRoyal`, `Evomi`).
+   A sticky-session gateway should keep connections alive instead.
+3. Add the row to the provider table above. The tests in
+   `internal/proxy/provider_test.go` fail if the registry and the config list
+   drift, and they build every provider's transport from its example URL.
 
 ## Feedback
 

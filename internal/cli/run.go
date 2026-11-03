@@ -23,15 +23,18 @@ type runOptions struct {
 	Rate        string
 	Mode        string
 	Edge        string
+	Provider    string
 	Concurrent  int
 	DeviceRatio int
-	Interval    time.Duration
-	Factory     bool
-	Bots        string
-	BotRatio    int
-	Follow      bool
-	Seed        int64
-	Summary     bool
+	// UnknownDeviceRatio: see config.RequestConfig.
+	UnknownDeviceRatio int
+	Interval           time.Duration
+	Factory            bool
+	Bots               string
+	BotRatio           int
+	Follow             bool
+	Seed               int64
+	Summary            bool
 }
 
 func newRunCommand(root *rootOptions) *cobra.Command {
@@ -62,11 +65,20 @@ func newRunCommand(root *rootOptions) *cobra.Command {
 				}
 				cfg.Requests.DeviceRatio = opts.DeviceRatio
 			}
+			if cmd.Flags().Changed("unknown-device-ratio") {
+				if opts.UnknownDeviceRatio < 0 || opts.UnknownDeviceRatio > 100 {
+					return fmt.Errorf("--unknown-device-ratio must be 0-100")
+				}
+				cfg.Requests.UnknownDeviceRatio = opts.UnknownDeviceRatio
+			}
 			if opts.Mode != "" {
 				cfg.Origin.Mode = config.Mode(opts.Mode)
 			}
 			if opts.Edge != "" {
 				cfg.Origin.Edge = config.Edge(strings.ToLower(opts.Edge))
+			}
+			if err := applyProviderFlag(&cfg, opts.Provider); err != nil {
+				return err
 			}
 			cfg.Normalize()
 			if err := applyBotFlags(&cfg, opts.Bots, opts.BotRatio, cmd.Flags().Changed("bot-ratio")); err != nil {
@@ -84,8 +96,10 @@ func newRunCommand(root *rootOptions) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Rate, "rate", "", "hits per minute, per worker, as N or MIN-MAX")
 	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: off, auto, spoof, proxy")
 	cmd.Flags().StringVar(&opts.Edge, "edge", "", "edge to spoof in spoof/auto mode: vercel, cloudflare")
+	cmd.Flags().StringVar(&opts.Provider, "provider", "", providerFlagUsage())
 	cmd.Flags().IntVarP(&opts.Concurrent, "concurrent", "c", 0, "workers per target")
 	cmd.Flags().IntVar(&opts.DeviceRatio, "device-ratio", 0, "percent of human hits that are desktop vs mobile (0-100)")
+	cmd.Flags().IntVar(&opts.UnknownDeviceRatio, "unknown-device-ratio", 0, "percent of human hits from browsers that can't be placed as desktop or mobile (0-100)")
 	cmd.Flags().DurationVar(&opts.Interval, "interval", time.Second, "stats print interval")
 	cmd.Flags().BoolVar(&opts.Factory, "factory", false, "ignore saved config and use built-in defaults")
 	cmd.Flags().StringVar(&opts.Bots, "bots", "", "restrict bot pool to categories/names, e.g. ai, crawler, GPTBot,ClaudeBot (see `hitmaker bots`)")

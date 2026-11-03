@@ -70,7 +70,7 @@ func TestGeneratorUseBotsRestrictsPool(t *testing.T) {
 	g.UseBots(filter)
 	// unknownRatio 100 => every request is a bot; the pool has one entry.
 	for i := 0; i < 50; i++ {
-		ident := g.Next(0, 100, 1)
+		ident := g.Next(DeviceMix{Bots: 100}, 1)
 		if !strings.Contains(ident.UserAgent, "ClaudeBot") {
 			t.Fatalf("got UA %q, want ClaudeBot", ident.UserAgent)
 		}

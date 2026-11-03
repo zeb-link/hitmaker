@@ -16,6 +16,7 @@ import (
 type probeOptions struct {
 	Mode     string
 	Edge     string
+	Provider string
 	Factory  bool
 	Timeout  time.Duration
 	Bots     string
@@ -41,6 +42,9 @@ func newProbeCommand(root *rootOptions) *cobra.Command {
 			}
 			if opts.Edge != "" {
 				cfg.Origin.Edge = config.Edge(strings.ToLower(opts.Edge))
+			}
+			if err := applyProviderFlag(&cfg, opts.Provider); err != nil {
+				return err
 			}
 			cfg.Normalize()
 			if err := applyBotFlags(&cfg, opts.Bots, opts.BotRatio, cmd.Flags().Changed("bot-ratio")); err != nil {
@@ -72,6 +76,7 @@ func newProbeCommand(root *rootOptions) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.Mode, "mode", "", "origin mode: off, auto, spoof, proxy")
 	cmd.Flags().StringVar(&opts.Edge, "edge", "", "edge to spoof in spoof/auto mode: vercel, cloudflare")
+	cmd.Flags().StringVar(&opts.Provider, "provider", "", providerFlagUsage())
 	cmd.Flags().BoolVar(&opts.Factory, "factory", false, "ignore saved config and use built-in defaults")
 	cmd.Flags().DurationVar(&opts.Timeout, "timeout", 10*time.Second, "request timeout")
 	cmd.Flags().StringVar(&opts.Bots, "bots", "", "send a bot identity: category/name, e.g. GPTBot or ai (see `hitmaker bots`)")

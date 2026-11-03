@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.6.0 - 2026-11-03
+
+- **Evomi** joins IPRoyal as a proxy provider. Each provider keeps its own
+  saved endpoint, so switching between them never loses credentials.
+  - `--provider iproyal|evomi` on `run` and `probe`.
+  - `EVOMI_URL` / `IPROYAL_URL` env vars. Setting only one selects that
+    provider; `HITMAKER_PROVIDER` picks when both are set.
+  - `hitmaker config set evomiurl <url>` saves and selects a provider;
+    `config set provider <name>` switches; `config set proxy-url <url>` sets
+    the active one.
+  - The config editor gains a "Proxy service" picker.
+  - Older config files keep working: their proxy URL moves under IPRoyal
+    and never changes which provider you have selected.
+- New **Unknown device %** knob (`--unknown-device-ratio`, config
+  `unknownDeviceRatio`, default 5): the share of human hits from browsers that
+  can't be placed as desktop or mobile. Bot traffic is unchanged.
+- Saved config files are now always written with owner-only permissions
+  (`0600`), since they can hold proxy credentials.
+- Built with Go 1.27.3, which requires macOS 13 or later. Bubble Tea 2.1.1,
+  `golang.org/x/net` 0.62.0, and CI actions v7. `govulncheck ./...` reports no
+  vulnerabilities.
+
 ## 2.5.1 - 2026-10-07
 
 - Cloudflare spoofing now sends the region the way `request.cf` does:
