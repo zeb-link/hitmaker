@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.1 - 2026-11-16
+
+### Security
+
+- Release binaries use Go 1.27.4. The reachable-vulnerability scan passes.
+
 ## 2.6.0 - 2026-11-03
 
 - **Evomi** joins IPRoyal as a proxy provider. Each provider keeps its own
